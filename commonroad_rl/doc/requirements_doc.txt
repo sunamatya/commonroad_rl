@@ -1,0 +1,11 @@
+Sphinx
+sphinx-autodoc-typehints
+sphinx-rtd-theme
+sphinxcontrib-apidoc
+sphinxcontrib-applehelp
+sphinxcontrib-devhelp
+sphinxcontrib-htmlhelp
+sphinxcontrib-jsmath
+sphinxcontrib-napoleon
+sphinxcontrib-qthelp
+sphinxcontrib-serializinghtml
