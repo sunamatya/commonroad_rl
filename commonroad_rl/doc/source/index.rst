@@ -1,5 +1,5 @@
 .. CommonRoad_RL documentation master file, created by
-   sphinx-quickstart on Tue Jul 10 09:17:31 2018.
+   sphinx-quickstart.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
@@ -10,7 +10,7 @@ CommonRoad-RL
 This project contains a software package to solve motion planning problems on CommonRoad
 using reinforcement learning methods, currently based on `OpenAI Stable Baselines <https://stable-baselines.readthedocs.io/en/master/>`__.
 
-The software is written in Python 3.6 and tested on Linux. The usage of the Anaconda_ Python distribution is strongly recommended.
+The software is written in Python 3.7 and tested on Linux 18.04. The usage of the Anaconda_ Python distribution is strongly recommended.
 
 .. _Anaconda: http://www.anaconda.com/download/#download
 
@@ -26,46 +26,57 @@ The software is written in Python 3.6 and tested on Linux. The usage of the Anac
 	* `OpenAI Safety Gym <https://openai.com/blog/safety-gym/>`__
 
 
-.. Requirements
-   ============
-
-   The required dependencies for running CommonRoad_io are:
-
-   * numpy>=1.13
-   * shapely>=1.6.4
-   * matplotlib>=2.2.2
-   * lxml>=4.2.2
-   * networkx>=2.2
-   * Pillow>=7.0.0
-
 Prerequisits
 ============
 
-This project should be run with `conda <https://www.anaconda.com/>`__. Make sure it is installed before proceeding with the installation.
-To create an environment for this project including all requirements, run::
+This project should be run with `conda <https://www.anaconda.com/>`__. Make sure it is installed before proceeding with the installation. Initialize conda::
+   
+   /path/to/conda/bin/conda init
 
-	conda env create -n cr36 -f environment.yml
+Install build packages::
+
+   sudo apt-get update
+   sudo apt-get install build-essential make cmake
+
 
 Installation
 ============
 
 Currently, the package can only be installed from the repository. First, clone it::
 
-	git clone https://gitlab.lrz.de/ss20-mpfav-rl/commonroad-rl.git
+	git clone https://gitlab.lrz.de/tum-cps/commonroad-rl.git
 
-After the repository is cloned, CommonRoad_rl can be installed without sudo rights with::
+To create an environment for this project including all requirements, run::
 
-	bash scripts/install.sh -e cr36 --no-root
+   conda env create -n cr37 -f environment.yml
+
+After the repository is cloned, CommonRoad-RL can be installed without sudo rights with::
+
+	bash scripts/install.sh -e cr37 --no-root
 
 and with sudo rights::
 
-	bash scripts/install.sh -e cr36
+	bash scripts/install.sh -e cr37
 
-:code:`cr36` to be replaced by the name of your conda environment if needed.
+:code:`cr37` to be replaced by the name of your conda environment if needed.
 
 This will build all softwares in your home folder. You can press ``ctrl`` + ``c`` to skip when asked for sudo password.
 Note that all necessary libraries need to be installed with sudo rights beforehands.
 Please ask your admin to install them for you if they are missing.
+
+(optional) Install pip packages for the docs. If you want to use jupyter notebook for the tutorials, also install jupyter::
+
+   source activate cr37
+   pip install -r commonroad_rl/doc/requirements_doc.txt
+   conda install jupyter
+
+
+Test if installation succeeds
+============
+Further details of our test system refer to ``./commonroad_rl/tests``. Run tests::
+
+   source activate cr37
+   pytest commonroad_rl/tests --scope unit module -m "not slow"
 
 Changelog
 ============
@@ -79,22 +90,21 @@ A tutorial on the main functionalities can be found in the form of jupyter noteb
 
 
 .. toctree::
-   :maxdepth: 6
+   :maxdepth: 2
    :caption: Contents:
 
-   documentation/index.rst
    module/index.rst
 
 
-.. Indices and tables
+..Indices and tables
    ==================
 
    * :ref:`genindex`
    * :ref:`modindex`
    * :ref:`search`
 
-   Contact information
-   ===================
+Contact information
+===================
 
-   :Website: `http://commonroad.in.tum.de <https://commonroad.in.tum.de/>`_
-   :Email: `commonroad@lists.lrz.de <commonroad@lists.lrz.de>`_
+:Website: `http://commonroad.in.tum.de <https://commonroad.in.tum.de/>`_
+:Email: `commonroad@lists.lrz.de <commonroad@lists.lrz.de>`_

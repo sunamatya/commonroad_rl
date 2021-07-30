@@ -13,6 +13,6 @@ CommonRoad_RL Module
     hyperparams/index.rst
     tests/index.rst
     tools/index.rst
-    utils_highd/index.rst
-    utils_ind/index.rst
     utils_run/index.rst
+
+

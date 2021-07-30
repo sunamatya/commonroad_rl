@@ -17,16 +17,16 @@ Observation
    :members:
    :member-order: bysource
 
-``GoalObservation`` class
--------------------------
-.. autoclass:: GoalObservation
+``EgoObservation`` class
+------------------------
+.. autoclass:: EgoObservation
    :members:
    :private-members:
    :member-order: bysource
 
-``SurroundingObservation`` class
---------------------------------
-.. autoclass:: SurroundingObservation
+``GoalObservation`` class
+-------------------------
+.. autoclass:: GoalObservation
    :members:
    :private-members:
    :member-order: bysource
@@ -38,10 +38,16 @@ Observation
    :private-members:
    :member-order: bysource
 
-``EgoObservation`` class
-------------------------
-.. autoclass:: EgoObservation
+``SurroundingObservation`` class
+--------------------------------
+.. autoclass:: SurroundingObservation
    :members:
    :private-members:
    :member-order: bysource
 
+``TrafficSignObservation`` class
+--------------------------------
+.. autoclass:: TrafficSignObservation
+   :members:
+   :private-members:
+   :member-order: bysource

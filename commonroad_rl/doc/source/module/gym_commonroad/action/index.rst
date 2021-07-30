@@ -10,29 +10,29 @@ Action
    :members:
    :member-order: bysource
 
-``HighLevelAction`` class
+``DiscreteAction`` class
 -------------------------
-.. autoclass:: HighLevelAction
+.. autoclass:: DiscreteAction
    :members:
    :private-members:
    :member-order: bysource
 
-``ReactivePlannerAction`` class
+``DiscretePMJerkAction`` class
 -------------------------------
-.. autoclass:: ReactivePlannerAction
+.. autoclass:: DiscretePMJerkAction
    :members:
    :member-order: bysource
 
-``ShipPlannerAction`` class
+``DiscretePMAction`` class
 ---------------------------
-.. autoclass:: ShipPlannerAction
+.. autoclass:: DiscretePMAction
    :members:
    :private-members:
    :member-order: bysource
 
-``LowLevelAction`` class
+``ContinuousAction`` class
 ---------------------------
-.. autoclass:: LowLevelAction
+.. autoclass:: ContinuousAction
    :members:
    :private-members:
    :member-order: bysource
@@ -62,6 +62,6 @@ Vehicle
 
 ``YawRateDynamics`` class
 -------------------------
-.. autoclass:: DiscreteVehicle
+.. autoclass:: YawRateDynamics
    :members:
    :member-order: bysource
