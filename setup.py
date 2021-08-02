@@ -27,8 +27,6 @@ setup(
         "networkx",
         "triangle",
         "gym",
-        "mpi4py",
-        "stable_baselines[mpi]",
         "commonroad-io>=2021.1",
     ],
     extras_require={
