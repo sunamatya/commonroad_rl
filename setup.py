@@ -14,7 +14,7 @@ setup(
     name="commonroad-rl",
     version="2020.2",
     packages=find_packages(
-        exclude=["utils_highd", "utils_ind", "tests", "planning", "utils_run"]
+        exclude=["tests", "planning", "utils_run"]
     ),
     package_data={"": ["*.xml", "*.pickle"]},
     description="Tools for applying reinforcement learning on commonroad scenarios.",
@@ -32,14 +32,6 @@ setup(
         "commonroad-io>=2021.1",
     ],
     extras_require={
-        "utils_ind": [
-            "pandas>=0.23.3",
-            "loguru>=0.2.5",
-            "numpy",
-            "matplotlib",
-            "scikit-image",
-        ],
-        "utils_highd": [],
         "utils_run": ["optuna", "PyYAML"],
         "tests": ["pytest"],
     },
