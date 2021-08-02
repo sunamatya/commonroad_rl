@@ -26,7 +26,6 @@ setup(
     install_requires=[
         "networkx",
         "triangle",
-        "gym",
         "commonroad-io>=2021.1",
     ],
     extras_require={
