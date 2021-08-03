@@ -26,7 +26,11 @@ setup(
     install_requires=[
         "networkx",
         "triangle",
+        "aenum",
         "commonroad-io>=2021.1",
+        "commonroad-vehicle-models",
+        "gym",
+        "stable_baselines"
     ],
     extras_require={
         "utils_run": ["optuna", "PyYAML"],
