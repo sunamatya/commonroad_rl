@@ -21,16 +21,6 @@ Copy Train Test
    :members:
    :member-order: bysource
 
-Merge Dict
-----------
-
-.. automodule:: commonroad_rl.tools.pickle_scenario.merge_dict
-   :members:
-   :member-order: bysource
-
-MPI Pickle
-----------
-
 
 Preprocessing
 -------------

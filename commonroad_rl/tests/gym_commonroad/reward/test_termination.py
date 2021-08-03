@@ -1,8 +1,7 @@
 """Unit tests for termination class"""
 import math
 
-from commonroad_rl.gym_commonroad.reward.hybrid_reward import HybridReward
-from commonroad_rl.gym_commonroad.termination import Termination
+from commonroad_rl.gym_commonroad.reward import Termination
 from commonroad_rl.tests.common.marker import unit_test, functional
 
 configs = {

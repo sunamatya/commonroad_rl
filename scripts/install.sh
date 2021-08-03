@@ -148,7 +148,7 @@ require_sudo apt-get install -y libomp-dev libcgal-dev libgmp-dev libglu1-mesa-d
 
 # ompi_info
 print_info "Installing commonroad_rl with pip"
-pip install --quiet -e .\[utils_ind,utils_highd,utils_run,tests\]
+pip install --quiet -e .\[utils_run,tests\]
 
 cd_to_installdir 
 

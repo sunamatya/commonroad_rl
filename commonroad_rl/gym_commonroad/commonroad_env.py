@@ -1,8 +1,6 @@
 import warnings
 
-from commonroad_rl.gym_commonroad.reward import reward_constructor
-from commonroad_rl.gym_commonroad.reward.reward import Reward
-from commonroad_rl.gym_commonroad.termination import Termination
+from commonroad_rl.gym_commonroad.reward import reward_constructor, Reward, Termination
 
 """
 Module for the CommonRoad Gym environment
@@ -36,9 +34,7 @@ from commonroad_rl.gym_commonroad.observation import ObservationCollector
 from commonroad_rl.gym_commonroad.utils.scenario_io import restore_scenario
 from commonroad_rl.gym_commonroad.utils.scenario import parse_map_name
 from commonroad_rl.gym_commonroad.action import ContinuousAction, DiscretePMJerkAction
-from commonroad_rl.gym_commonroad.reward import reward_constructor
-from commonroad_rl.gym_commonroad.reward.reward import Reward
-from commonroad_rl.gym_commonroad.termination import Termination
+from commonroad_rl.gym_commonroad.reward import reward_constructor, Reward, Termination
 
 matplotlib.use("AGG")
 LOGGER = logging.getLogger(__name__)

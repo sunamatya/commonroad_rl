@@ -1,3 +1,6 @@
 """Classes for the calculation of the reward"""
-
-__all__ = ["reward", "hybrid_reward", "dense_reward", "sparse_reward"]
+from commonroad_rl.gym_commonroad.reward.reward import *
+from commonroad_rl.gym_commonroad.reward.sparse_reward import *
+from commonroad_rl.gym_commonroad.reward.hybrid_reward import *
+from commonroad_rl.gym_commonroad.reward.dense_reward import *
+from commonroad_rl.gym_commonroad.reward.termination import *

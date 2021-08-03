@@ -7,7 +7,7 @@ Tests
 **CommonRoad-RL Testing**
 
 This module contains the test system of the reposiroty
-`CommonRoad-RL <https://gitlab.lrz.de/ss20-mpfav-rl/commonroad-rl>`__.
+`CommonRoad-RL <https://gitlab.lrz.de/tum-cps/commonroad-rl>`__.
 It uses `pytest <https://docs.pytest.org/en/stable/>`__ for test
 management with customized markers.
 
@@ -231,19 +231,88 @@ Path
 Gym CommonRoad
 ==============
 
-Feature Extraction
-------------------
+Action
+--------
 
-Test Goal
-^^^^^^^^^
-.. automodule:: commonroad_rl.tests.gym_commonroad.feature_extraction.test_goal
+Test Action
+^^^^^^^^^^^^
+.. automodule:: commonroad_rl.tests.gym_commonroad.action.test_action
    :members:
    :undoc-members:
    :member-order: bysource
 
-Test Surroundings
+Test Vehicle
+^^^^^^^^^^^^^^
+.. automodule:: commonroad_rl.tests.gym_commonroad.action.test_vehicle
+   :members:
+   :undoc-members:
+   :member-order: bysource
+
+Observation
+-------------
+
+Test Observation
+^^^^^^^^^^^^^^^^^^
+.. automodule:: commonroad_rl.tests.gym_commonroad.observation.test_observation
+   :members:
+   :undoc-members:
+   :member-order: bysource
+
+Test Ego Observation
+^^^^^^^^^^^^^^^^^^^^^
+.. automodule:: commonroad_rl.tests.gym_commonroad.observation.test_ego_observation
+   :members:
+   :undoc-members:
+   :member-order: bysource
+
+Test Goal Observation
+^^^^^^^^^^^^^^^^^^^^^^^
+.. automodule:: commonroad_rl.tests.gym_commonroad.observation.test_goal_observation
+   :members:
+   :undoc-members:
+   :member-order: bysource
+
+Test Lanelet Network Observation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.. automodule:: commonroad_rl.tests.gym_commonroad.observation.test_lanelet_network_observation
+   :members:
+   :undoc-members:
+   :member-order: bysource
+
+Test Surrounding Observation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.. automodule:: commonroad_rl.tests.gym_commonroad.observation.test_surrounding_observation
+   :members:
+   :undoc-members:
+   :member-order: bysource
+
+Test Traffic Sign Observation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.. automodule:: commonroad_rl.tests.gym_commonroad.observation.test_traffic_sign_observation
+   :members:
+   :undoc-members:
+   :member-order: bysource
+
+Reward
+------------------
+
+Test Sparse Reward
+^^^^^^^^^^^^^^^^^^
+.. automodule:: commonroad_rl.tests.gym_commonroad.reward.test_sparse_reward
+   :members:
+   :undoc-members:
+   :member-order: bysource
+
+Test Hybrid_reward
+^^^^^^^^^^^^^^^^^^
+.. automodule:: commonroad_rl.tests.gym_commonroad.reward.test_hybrid_reward
+   :members:
+   :undoc-members:
+   :member-order: bysource
+
+Test Termination
 ^^^^^^^^^^^^^^^^^
-.. automodule:: commonroad_rl.tests.gym_commonroad.feature_extraction.test_surroundings
+.. automodule:: commonroad_rl.tests.gym_commonroad.reward.test_termination
    :members:
    :undoc-members:
    :member-order: bysource
@@ -258,9 +327,9 @@ Test Scenario
    :undoc-members:
    :member-order: bysource
 
-Test Action
------------
-.. automodule:: commonroad_rl.tests.gym_commonroad.test_action
+Test Navigator
+--------------
+.. automodule:: commonroad_rl.tests.gym_commonroad.utils.test_navigator
    :members:
    :undoc-members:
    :member-order: bysource
@@ -268,27 +337,6 @@ Test Action
 Test CommonRoad Env
 -------------------
 .. automodule:: commonroad_rl.tests.gym_commonroad.test_commonroad_env
-   :members:
-   :undoc-members:
-   :member-order: bysource
-
-Test Gym CommonRoad
--------------------
-.. automodule:: commonroad_rl.tests.gym_commonroad.test_gym_commonroad
-   :members:
-   :undoc-members:
-   :member-order: bysource
-
-Test Observation
-----------------
-.. automodule:: commonroad_rl.tests.gym_commonroad.test_vehicle
-   :members:
-   :undoc-members:
-   :member-order: bysource
-
-Test Vehicle
-------------
-.. automodule:: commonroad_rl.tests.gym_commonroad.test_vehicle
    :members:
    :undoc-members:
    :member-order: bysource
@@ -301,21 +349,21 @@ Utils
 
 Test Hyperparams Opt
 ^^^^^^^^^^^^^^^^^^^^
-.. automodule:: commonroad_rl.tests.utils_run.utils.test_hyperparams_opt
+.. automodule:: commonroad_rl.tests.utils_run.test_hyperparams_opt
    :members:
    :undoc-members:
    :member-order: bysource
 
 Test Observation Configs Opt
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-.. automodule:: commonroad_rl.tests.utils_run.utils.test_observation_configs_opt
+.. automodule:: commonroad_rl.tests.utils_run.test_observation_configs_opt
    :members:
    :undoc-members:
    :member-order: bysource
 
 Test Reward Configs Opt
 ^^^^^^^^^^^^^^^^^^^^^^^
-.. automodule:: commonroad_rl.tests.utils_run.utils.test_reward_configs_opt
+.. automodule:: commonroad_rl.tests.utils_run.test_reward_configs_opt
    :members:
    :undoc-members:
    :member-order: bysource

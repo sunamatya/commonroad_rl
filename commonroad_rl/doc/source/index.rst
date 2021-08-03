@@ -3,9 +3,9 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-=============
+==================
 CommonRoad-RL
-=============
+==================
 
 This project contains a software package to solve motion planning problems on CommonRoad
 using reinforcement learning methods, currently based on `OpenAI Stable Baselines <https://stable-baselines.readthedocs.io/en/master/>`__.
@@ -27,7 +27,7 @@ The software is written in Python 3.7 and tested on Linux 18.04. The usage of th
 
 
 Prerequisits
-============
+==================
 
 This project should be run with `conda <https://www.anaconda.com/>`__. Make sure it is installed before proceeding with the installation. Initialize conda::
    
@@ -40,7 +40,7 @@ Install build packages::
 
 
 Installation
-============
+==================
 
 Currently, the package can only be installed from the repository. First, clone it::
 
@@ -72,19 +72,19 @@ Please ask your admin to install them for you if they are missing.
 
 
 Test if installation succeeds
-============
+=============================
 Further details of our test system refer to ``./commonroad_rl/tests``. Run tests::
 
    source activate cr37
    pytest commonroad_rl/tests --scope unit module -m "not slow"
 
 Changelog
-============
+==================
 
  
 
 Getting Started
-===============
+==================
 
 A tutorial on the main functionalities can be found in the form of jupyter notebooks in the :code:`tutorials` folder.
 
@@ -96,12 +96,12 @@ A tutorial on the main functionalities can be found in the form of jupyter noteb
    module/index.rst
 
 
-..Indices and tables
-   ==================
+Indices and tables
+==================
 
-   * :ref:`genindex`
-   * :ref:`modindex`
-   * :ref:`search`
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`
 
 Contact information
 ===================

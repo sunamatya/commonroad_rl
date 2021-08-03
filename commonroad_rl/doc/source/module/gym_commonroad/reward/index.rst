@@ -36,7 +36,7 @@ Termination
 .. automodule:: commonroad_rl.gym_commonroad.reward.termination
 
 ``Termination`` class
------------------
+---------------------------
 .. autoclass:: Termination
    :members:
    :member-order: bysource
