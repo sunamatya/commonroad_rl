@@ -98,7 +98,7 @@ class ObservationCollector:
                 lower_bounds = np.concatenate((lower_bounds, space.low))
                 upper_bounds = np.concatenate((upper_bounds, space.high))
             self._observation_space_size = lower_bounds.shape[0]
-            observation_space = gym.spaces.Box(low=lower_bounds, high=upper_bounds, dtype=np.float32)
+            observation_space = gym.spaces.Box(low=lower_bounds, high=upper_bounds, dtype=np.float64)
             LOGGER.debug(f"Size of flattened observation space: {self._observation_space_size}")
         else:
             observation_space = gym.spaces.Dict(self.observation_space_dict)

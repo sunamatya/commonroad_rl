@@ -48,7 +48,7 @@ This project should be run with conda. Make sure it is installed before proceedi
 ```
 2. set up git & ssh keys, then clone this repository
 ```
-git clone -b development git@gitlab.lrz.de:ss20-mpfav-rl/commonroad-rl.git
+git clone git@gitlab.lrz.de:ss20-mpfav-rl/commonroad-rl.git
 ```
 3. install build packages
 ```

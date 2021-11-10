@@ -155,7 +155,7 @@ cd_to_installdir
 # Commonroad Collision and Drivability Checker
 # install requirement before being asked to in the script
 print_info "Cloning commonroad-drivability-checker"
-git clone https://gitlab.lrz.de/tum-cps/commonroad-drivability-checker.git || exit_with_error "clone commonroad-drivability-checker failed"
+git clone --depth 1 --branch v2021.2 https://gitlab.lrz.de/tum-cps/commonroad-drivability-checker.git || exit_with_error "clone commonroad-drivability-checker failed"
 safe_cd commonroad-drivability-checker
 print_info "Building commonroad-drivability-checker"
 # rebuilding cannot be avoided since this also installs packages in global scope that cannot be cached
