@@ -30,6 +30,7 @@ setup(
         "commonroad-io>=2021.1",
         "commonroad-vehicle-models",
         "gym",
+        "tensorflow",
         "stable_baselines"
     ],
     extras_require={

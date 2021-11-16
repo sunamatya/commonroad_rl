@@ -2,6 +2,31 @@
 
 This repository contains a software package to solve motion planning problems on [CommonRoad](https://commonroad.in.tum.de) using Reinforcement Learning algorithms. We currently use the implementation for the RL algorithms from [OpenAI Stable Baselines](https://stable-baselines.readthedocs.io/en/master/), but the package can be run with any standard (OpenAI Gym compatible) RL implementations.
 
+## CommonRoad-RL in a nutshell
+
+```python
+import gym
+import commonroad_rl.gym_commonroad
+
+# kwargs overwrites configs defined in commonroad_rl/gym_commonroad/configs.yaml
+env = gym.make("commonroad-v1",
+               action_configs={"action_type": "continuous"},
+               goal_configs={"observe_distance_goal_long": True, "observe_distance_goal_lat": True},
+               surrounding_configs={"observe_lidar_circle_surrounding": True, "lidar_circle_num_beams": 20},
+               reward_type="sparse_reward",
+               reward_configs_sparse={"reward_goal_reached": 50., "reward_collision": -100})
+
+observation = env.reset()
+for _ in range(500):
+    # env.render() # rendered images with be saved under ./img
+    action = env.action_space.sample() # your agent here (this takes random actions)
+    observation, reward, done, info = env.step(action)
+
+    if done:
+        observation = env.reset()
+env.close()
+```
+
 ## Folder structure
 ```
 commonroad-rl                                           
@@ -120,24 +145,6 @@ Please use `development` branch or open a new `feature_xxx` branch to make contr
 2. [OpenAI Spinning Up](https://spinningup.openai.com/en/latest/spinningup/rl_intro.html): we do not use their implementations in our project. But they provide quite nice explanations of RL concepts.
 3. [OpenAI Gym](https://gym.openai.com/docs/): general interface.
 4. [OpenAI Safety Gym](https://openai.com/blog/safety-gym/): a special collection of Gyms for safe RL. Configurable as our project.
-
-## Contributors (ranked by number of commits)
-* Xiao Wang
-* Niels Mündler
-* Peter Kocsis
-* Hsuan-cheng (Brian) Liao
-* Mingyang Wang
-* Armin Ettenhofer
-* Matthias Hamacher
-* Zhenyu Li
-* Christoph Pillmayer
-* Xi Chen
-* Michael Feil
-* Johannes Kaiser
-* Hanna Krasowski
-* Zygimantas Marcinkus
-* Yang Zhang
-* Gabriel Wiedon
 
 ## Publication
 

@@ -22,3 +22,5 @@ dependencies:
       - commonroad-vehicle-models
       # Evaluation dependencies
       - SALib==1.3.13
+      # parser for setup.py
+      - pyparsing==2.4.7
