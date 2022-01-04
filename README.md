@@ -160,5 +160,7 @@ If you use CommonRoad-RL in your paper, please cite:
 
 Configurations and trained models used in our experiments in the paper can be downloaded [here](https://nextcloud.in.tum.de/index.php/s/n7oEr9dsyrqjgPZ).
 
+Models trained with current version of code using the same configurations can be downloaded [here](https://nextcloud.in.tum.de/index.php/s/F8C9n2nWmfJy9pr)
+
 ## Contact:
 commonroad@lists.lrz.de
