@@ -51,17 +51,25 @@ def main():
     fns = sorted(glob.glob(os.path.join(args.input_dir, "*.pickle")))
     random.shuffle(fns)
 
-    num_train = int(len(fns) * args.train_ratio)
+    if args.train_ratio == -1:
+        num_train=len(fns)
+        print("Copying training and testing data ...")
+        for i, fn in enumerate(fns):
+            print(f"{i + 1}/{num_train}", end="\r")
+            copyfile(fn, os.path.join(train_path, ntpath.basename(fn)))
+            copyfile(fn, os.path.join(test_path, ntpath.basename(fn)))
+    else:
+        num_train = int(len(fns) * args.train_ratio)
 
-    print("Copying training data ...")
-    for i, fn in enumerate(fns[:num_train]):
-        print(f"{i + 1}/{num_train}", end="\r")
-        copyfile(fn, os.path.join(train_path, ntpath.basename(fn)))
+        print("Copying training data ...")
+        for i, fn in enumerate(fns[:num_train]):
+            print(f"{i + 1}/{num_train}", end="\r")
+            copyfile(fn, os.path.join(train_path, ntpath.basename(fn)))
 
-    print("Copying test data...")
-    for i, fn in enumerate(fns[num_train:]):
-        print(f"{i + 1}/{len(fns) - num_train}", end="\r")
-        copyfile(fn, os.path.join(test_path, ntpath.basename(fn)))
+        print("Copying test data...")
+        for i, fn in enumerate(fns[num_train:]):
+            print(f"{i + 1}/{len(fns) - num_train}", end="\r")
+            copyfile(fn, os.path.join(test_path, ntpath.basename(fn)))
 
 
 if __name__ == "__main__":

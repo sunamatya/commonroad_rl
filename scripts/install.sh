@@ -2,12 +2,13 @@
 
 # variables
 PYTHON_VERSION=3.7
-JOBS=$(($(nproc)<32 ? $(nproc) : 32))
+JOBS=$(($(nproc)<64 ? $(nproc) : 64))
+echo $JOBS
 NO_ROOT="FALSE"
 ENV=""
 
-INSTALL_FOLDER="install"
-INSTALL_DIR="$(pwd)/install"
+INSTALL_FOLDER="external"
+INSTALL_DIR="$(pwd)/$INSTALL_FOLDER"
 
 # Parse args
 while [[ $# -gt 0 ]]; do
@@ -99,14 +100,6 @@ function cd_to_installdir() {
 
 # ---- start script ----
 
-# prepare install dir
-if [ -d "$INSTALL_DIR" ]; then
-   exit_with_error "install directory already exists. please remove $INSTALL_DIR before continueing";
-else
-   print_info "creating dir $INSTALL_DIR"
-   mkdir -p $INSTALL_FOLDER
-fi 
-
 # activate conda env
 if [[ "$ENVIRONMENT" != "" ]]; then
   # check if env exists
@@ -152,32 +145,14 @@ pip install --quiet -e .\[utils_run,tests\]
 
 cd_to_installdir 
 
-# Commonroad Collision and Drivability Checker
-# install requirement before being asked to in the script
-print_info "Cloning commonroad-drivability-checker"
-git clone --depth 1 --branch v2021.2 https://gitlab.lrz.de/tum-cps/commonroad-drivability-checker.git || exit_with_error "clone commonroad-drivability-checker failed"
 safe_cd commonroad-drivability-checker
 print_info "Building commonroad-drivability-checker"
 # rebuilding cannot be avoided since this also installs packages in global scope that cannot be cached
 if [ "${NO_ROOT}" == "TRUE" ]; then
-  bash build.sh -e "$CONDA_PREFIX" -v $PYTHON_VERSION --serializer --no-root -j "$JOBS" #> /dev/null 2>&1
+  bash build.sh -e "$CONDA_PREFIX" -v $PYTHON_VERSION --serializer --install --wheel --no-root -j $JOBS > /dev/null 2>&1
 else
-  bash build.sh -e "$CONDA_PREFIX" -v $PYTHON_VERSION --serializer -j "$JOBS" #> /dev/null 2>&1
+  bash build.sh -e "$CONDA_PREFIX" -v $PYTHON_VERSION --serializer --install --wheel -j $JOBS > /dev/null 2>&1
 fi
-cp ./commonroad_dc/pycrcc.cpython* ./.
-cp ./commonroad_dc/lib* ./.
-cd_to_installdir
-print_info "Installing commonroad drivability checker package"
-echo "$(pwd)/commonroad-drivability-checker" >> "${CONDA_PREFIX}/lib/python${PYTHON_VERSION}/site-packages/commonroad.pth"
-
-
-# CommonRoad Route Planner
-print_info "cloning commonroad-route-planner"
-cd_to_installdir
-
-git clone https://gitlab.lrz.de/tum-cps/commonroad-route-planner.git || exit_with_error "clone commonroad-route-planner failed " && \
-safe_cd commonroad-route-planner && \
-print_warning "Installing commonroad-route-planner from public respository"
 
 python setup.py install
 cd_to_installdir

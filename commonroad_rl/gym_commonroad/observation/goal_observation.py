@@ -9,10 +9,11 @@ from commonroad.planning.goal import GoalRegion
 from commonroad.planning.planning_problem import PlanningProblem
 from commonroad.scenario.obstacle import State
 from commonroad.scenario.scenario import Scenario
-from commonroad.visualization.draw_dispatch_cr import draw_object
+from commonroad.visualization.mp_renderer import MPRenderer
+from commonroad.visualization.param_server import ParamServer
 from commonroad_rl.gym_commonroad.observation.observation import Observation
 from commonroad_rl.gym_commonroad.utils.navigator import Navigator
-
+from commonroad_dc.pycrccosy import CurvilinearCoordinateSystem
 
 class GoalObservation(Observation):
     """
@@ -75,7 +76,8 @@ class GoalObservation(Observation):
 
     def observe(self, ego_state: State, goal: Union[GoalRegion, None] = None,
                 scenario: Union[Scenario, None] = None, planning_problem: Union[PlanningProblem, None] = None,
-                ego_lanelet_ids: Union[List[int], None] = None, navigator: Union[Navigator, None] = None) \
+                ego_lanelet_ids: Union[List[int], None] = None, navigator: Union[Navigator, None] = None,
+                episode_length: int = None,local_ccosy: Union[None, CurvilinearCoordinateSystem] = None) \
             -> Union[np.array, Dict]:
         """ Create goal related observation for given state in an environment.
 
@@ -101,7 +103,7 @@ class GoalObservation(Observation):
                 distance_goal_long = self.observation_history_dict.get("distance_goal_long", 1e4)
                 distance_goal_lat = self.observation_history_dict.get("distance_goal_lat", 1e4)
             (distance_goal_long_advance, distance_goal_lat_advance) = \
-                self._get_long_lat_distance_advance_to_goal(ego_state, distance_goal_long, distance_goal_lat)
+                self._get_long_lat_distance_advance_to_goal(distance_goal_long, distance_goal_lat)
 
             self.observation_history_dict["distance_goal_long_advance"] = distance_goal_long_advance
             self.observation_history_dict["distance_goal_lat_advance"] = distance_goal_lat_advance
@@ -134,40 +136,49 @@ class GoalObservation(Observation):
             observation_dict["distance_goal_long_lane"] = np.array([distance_goal_long_lane])
 
         # Check if the ego vehicle has reached the goal
-        is_goal_reached = self._check_goal_reached(goal, ego_state, self.relax_is_goal_reached)
+        if self.observe_is_goal_reached or self.observe_is_time_out:
+            is_goal_reached = self._check_goal_reached(goal, ego_state, self.relax_is_goal_reached)
         if self.observe_is_goal_reached:
             observation_dict["is_goal_reached"] = np.array([is_goal_reached])
         # Check if maximum episode length exceeded
         if self.observe_is_time_out:
-            is_time_out = GoalObservation._check_is_time_out(ego_state, goal, is_goal_reached)
+            is_time_out = GoalObservation._check_is_time_out(ego_state, goal, is_goal_reached, episode_length)
+            if not is_time_out:
+                # check if ego vehicle reaches the end of the road
+                if not local_ccosy.cartesian_point_inside_projection_domain(ego_state.position[0], ego_state.position[1]):
+                    is_time_out=True
             observation_dict["is_time_out"] = np.array([is_time_out])
 
         return observation_dict
 
-    def draw(self, render_configs: Dict, navigator: Union[None, Navigator]):
+    def draw(self, render_configs: Dict, render: MPRenderer, navigator: Union[None, Navigator]):
         """ Method to draw the observation """
         if render_configs["render_global_ccosy"]:
             # TODO: This functionality has been taken from commonroad-route-planner
             # As soon as the route-planner supports drawing only the ccosy, this part should be replaced
-            for route_merged_lanelet in navigator.merged_route_lanelets:
-                draw_object(route_merged_lanelet, draw_params={
-                    "lanelet": {"center_bound_color": "#128c01",
-                                "unique_colors": False,
-                                # colorizes center_vertices and labels of each lanelet differently
-                                "draw_stop_line": True,
-                                "stop_line_color": "#ffffff",
-                                "draw_line_markings": False,
-                                "draw_left_bound": False,
-                                "draw_right_bound": False,
-                                "draw_center_bound": True,
-                                "draw_border_vertices": False,
-                                "draw_start_and_direction": False,
-                                "show_label": False,
-                                "draw_linewidth": 1,
-                                "fill_lanelet": False,
-                                "facecolor": "#128c01",
-                                }
-                })
+            draw_params = ParamServer(
+                {"lanelet": {"center_bound_color": "#128c01",
+                             "unique_colors": False,
+                             "draw_stop_line": True,
+                             "stop_line_color": "#ffffff",
+                             "draw_line_markings": False,
+                             "draw_left_bound": False,
+                             "draw_right_bound": False,
+                             "draw_center_bound": True,
+                             "draw_border_vertices": False,
+                             "draw_start_and_direction": False,
+                             "show_label": False,
+                             "draw_linewidth": 1,
+                             "fill_lanelet": False,
+                             "facecolor": "#128c01",
+                             }
+                 }
+            )
+            # TODO: temporary fix for missing draw method in Lanelet, remove after fixed in cr-io
+            from commonroad.scenario.lanelet import LaneletNetwork
+            LaneletNetwork.create_from_lanelet_list(navigator.merged_route_lanelets).draw(render, draw_params=draw_params)
+            # for route_merged_lanelet in navigator.merged_route_lanelets:
+            #     route_merged_lanelet.draw(render, draw_params=draw_params)
 
     @staticmethod
     def _get_goal_euclidean_distance(position: np.array, goal: GoalRegion) -> float:
@@ -202,23 +213,23 @@ class GoalObservation(Observation):
         position_list = [shape.center for shape in shape_group.shapes]
         return np.mean(np.array(position_list), axis=0)
 
-    def _get_long_lat_distance_advance_to_goal(self, ego_state: State, distance_goal_long: float,
+    def _get_long_lat_distance_advance_to_goal(self, distance_goal_long: float,
                                                distance_goal_lat: float) -> Tuple[float, float]:
         """
         Get longitudinal and lateral distances to the goal over the planned route
 
-        :param ego_state: the current state of the agent
         :param distance_goal_long: the current distance_goal_long observation
         :param distance_goal_lat: the current distance_goal_lat observation
 
         :return: The tuple of the longitudinal and the lateral distance advances
         """
-        if ego_state.time_step == 0 or not self.observe_distance_goal_long:
+        if "distance_goal_long" not in self.observation_history_dict or not self.observe_distance_goal_long:
             distance_goal_long_advance = 0.0
         else:
-            distance_goal_long_advance = abs(self.observation_history_dict["distance_goal_long"]) - abs(distance_goal_long)
+            distance_goal_long_advance = abs(self.observation_history_dict["distance_goal_long"]) - abs(
+                distance_goal_long)
 
-        if ego_state.time_step == 0 or not self.observe_distance_goal_lat:
+        if "distance_goal_lat" not in self.observation_history_dict or not self.observe_distance_goal_lat:
             distance_goal_lat_advance = 0.0
         else:
             distance_goal_lat_advance = abs(self.observation_history_dict["distance_goal_lat"]) - abs(distance_goal_lat)
@@ -361,7 +372,7 @@ class GoalObservation(Observation):
             return goal.is_reached(ego_state)
 
     @staticmethod
-    def _check_is_time_out(ego_state: State, goal: GoalRegion, is_goal_reached: bool) -> bool:
+    def _check_is_time_out(ego_state: State, goal: GoalRegion, is_goal_reached: bool, episode_length=None) -> bool:
         """
         Check if maximum episode length exceeded
 
@@ -371,8 +382,9 @@ class GoalObservation(Observation):
         :return: True if no more time left and the goal has not been reached
         """
         # TODO maybe store value and only calculate once
-        ep_length = max(s.time_step.end for s in goal.state_list)
-        return ego_state.time_step >= ep_length and not is_goal_reached
+        if episode_length is None:
+            episode_length = max(s.time_step.end for s in goal.state_list)
+        return ego_state.time_step >= episode_length and not is_goal_reached
 
     @staticmethod
     def get_long_lat_distance_to_goal(position: np.array, navigator: Navigator) -> Tuple[float, float]:
@@ -392,10 +404,6 @@ class GoalObservation(Observation):
             return navigator.get_long_lat_distance_to_goal(position)
         except ValueError:
             return np.nan, np.nan
-            # assert self.observation_history_dict.get("distance_goal_long"), \
-            #     "Ego vehicle started outside the global coordinate system"
-            # return self.observation_history_dict["distance_goal_long"], self.observation_history_dict[
-            #     "distance_goal_lat"]
 
 
 if __name__ == "__main__":

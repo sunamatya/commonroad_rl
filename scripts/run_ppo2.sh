@@ -5,13 +5,21 @@
 # where the script is run with seed 1 and the hybrid_reward
 
 
-PICKLE_PATH="pickles"
+<<<<<<< HEAD
+PICKLE_PATH="/home/wangx/data/highD-dataset-v1.0/10m_goal_downsample/pickles"
+=======
+PICKLE_PATH="/home/wangx/data/highD-dataset-v1.0/0908/pickle_fixed"
+>>>>>>> sumo
 OUT_PATH="."
 
 SEED=$1
 REWARD=$2
-NUM_CPUS=64
+NUM_CPUS=32
+<<<<<<< HEAD
 STEPS=1000000 # 1000000
+=======
+STEPS=5000000
+>>>>>>> sumo
 
 while getopts ":p:o:s:i:" opt; do
   case $opt in
@@ -51,28 +59,38 @@ REWARD=$2
 META_PATH="${PICKLE_PATH}/meta_scenario"
 TRAIN_PATH="${PICKLE_PATH}/problem_train"
 TEST_PATH="${PICKLE_PATH}/problem_test"
-LOG_PATH="$OUT_PATH/log/$2"
+LOG_PATH="$OUT_PATH/log/tmp/unsafe"
 
 # Split pickle files into subfolders
-python -m commonroad_rl.tools.pickle_scenario.copy_files -i "${TRAIN_PATH}" -o "${TRAIN_PATH}" -n "$NUM_CPUS" -f *.pickle -d
-python -m commonroad_rl.tools.pickle_scenario.copy_files -i "${TEST_PATH}" -o "${TEST_PATH}" -n "$NUM_CPUS" -f *.pickle -d
+#python -m commonroad_rl.tools.pickle_scenario.copy_files -i "${TRAIN_PATH}" -o "${TRAIN_PATH}" -n "$NUM_CPUS" -f "*.pickle" -d
+python -m commonroad_rl.tools.pickle_scenario.copy_files -i "${TEST_PATH}" -o "${TEST_PATH}" -n "$NUM_CPUS" -f "*.pickle" -d
 
-
+:'
 # Train
-python -m commonroad_rl.train_model --uuid none --algo ppo2 --seed "$SEED" --eval-freq -1 -f "$LOG_PATH" --n_envs "$NUM_CPUS" -n "$STEPS" \
-   --env-kwargs reward_type:"str('$REWARD')"\
-   meta_scenario_path:"str('$META_PATH')" \
-   train_reset_config_path:"str('${TRAIN_PATH}')" \
-   test_reset_config_path:"str('${TEST_PATH}')"  --save-freq 5000 \
-   --info_keywords is_collision is_time_out is_off_road is_friction_violation is_goal_reached \
+<<<<<<< HEAD
+#python -m commonroad_rl.train_model --uuid none --algo ppo2 --seed "$SEED" --eval-freq -1 -f "$LOG_PATH" --n_envs "$NUM_CPUS" -n "$STEPS" \
+#   --env-kwargs reward_type:"str('$REWARD')"\
+#   meta_scenario_path:"str('$META_PATH')" \
+#   train_reset_config_path:"str('${TRAIN_PATH}')" \
+#   test_reset_config_path:"str('${TEST_PATH}')"  --save-freq 5000 \
+#   --info_keywords is_collision is_time_out is_off_road is_friction_violation is_goal_reached \
 #--optimize-reward-configs --n-trials 200 --n-jobs 1 --eval-episodes 200 --guided\ # set eval frequency to a value ~10% of trainingsteps
 # --debug
  # -i ../log/ppo2/commonroad-v0_4/best_model.zip
 
+=======
+python -m commonroad_rl.train_model --uuid top --algo ppo2 --seed "$SEED" --eval-freq -1 -f "$LOG_PATH" --n_envs "$NUM_CPUS" -n "$STEPS" \
+   --env-kwargs reward_type:"str('$REWARD')"\
+   meta_scenario_path:"str('$META_PATH')" \
+   train_reset_config_path:"str('${TRAIN_PATH}')" \
+   test_reset_config_path:"str('${TEST_PATH}')"  --save-freq 100000 \
+   --info_keywords is_collision is_time_out is_off_road is_friction_violation is_goal_reached #-i ./log/hybrid_reward/strict_goal_safe_dist/config_3/rl_model_1949376_steps.zip
+'
+>>>>>>> sumo
 # Delete subfolders
-for i in $(seq 1 "$NUM_CPUS")
-do
-    rm -rf "${TRAIN_PATH:?}"/$((i-1))
-    rm -rf "${TEST_PATH:?}"/$((i-1))
-done
+#for i in $(seq 1 "$NUM_CPUS")
+#do
+#    rm -rf "${TRAIN_PATH:?}"/$((i-1))
+#    rm -rf "${TEST_PATH:?}"/$((i-1))
+#done
 

@@ -6,9 +6,10 @@ import logging
 import os
 
 from commonroad_dc.feasibility.feasibility_checker import FeasibilityException
-from commonroad_dc.feasibility.vehicle_dynamics import VehicleDynamics
 
 os.environ["KMP_WARNINGS"] = "off"
+os.environ["KMP_AFFINITY"] = "none"
+logging.getLogger("tensorflow").disabled = True
 from typing import Union, List
 import gym
 import yaml
@@ -20,16 +21,15 @@ from commonroad.scenario.scenario import ScenarioID, Scenario
 from commonroad.common.solution import VehicleModel
 from commonroad.planning.planning_problem import PlanningProblemSet
 from commonroad.scenario.trajectory import Trajectory, State
-from commonroad.visualization.draw_dispatch_cr import draw_object
 from commonroad_dc.feasibility.solution_checker import valid_solution, _simulate_trajectory_if_input_vector, \
     GoalNotReachedException, CollisionException
 from gym import Env
-from stable_baselines.common.vec_env import VecNormalize
 
 from commonroad_rl.utils_run.vec_env import CommonRoadVecEnv
 from commonroad_rl.gym_commonroad.commonroad_env import CommonroadEnv
 from commonroad_rl.gym_commonroad.constants import PATH_PARAMS
-from commonroad_rl.utils_run.utils import ALGOS
+from commonroad_rl.utils_run.utils import load_model_and_vecnormalize
+
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
@@ -126,23 +126,10 @@ def create_solution(commonroad_env: CommonroadEnv, output_directory: str, cost_f
     return solution_valid
 
 
-def load_model(model_path: str, algo: str):
-    """
-    Load trained model
-
-    :param model_path: Path to the trained model
-    :param algo: The used RL algorithm
-    """
-    # Load the trained agent
-    model_path = os.path.join(model_path, "best_model.zip")
-    model = ALGOS[algo].load(model_path)
-
-    return model
-
-
 def solve_scenarios(test_path: str, model_path: str, algo: str, solution_path: str, cost_function: str,
                     multiprocessing: bool = False, hyperparam_filename: str = "model_hyperparameters.yml",
                     config_filename: str = "environment_configurations.yml", env_id: str = "commonroad-v1",
+                    render: bool = False
                     ) -> List[bool]:
     """
     Solve a batch of scenarios using a trained model
@@ -173,7 +160,7 @@ def solve_scenarios(test_path: str, model_path: str, algo: str, solution_path: s
     with open(config_fn, "r") as f:
         env_kwargs = yaml.load(f, Loader=yaml.Loader)
 
-    env_kwargs["termination_configs"].update({"terminate_on_friction_violation": True})
+    env_kwargs["termination_configs"].update({"terminate_on_friction_violation": False})
     env_kwargs["goal_configs"].update({"relax_is_goal_reached": False})
     env_kwargs.update(
         {"meta_scenario_path": os.path.join(test_path, 'meta_scenario'),
@@ -187,29 +174,9 @@ def solve_scenarios(test_path: str, model_path: str, algo: str, solution_path: s
     results = []
 
     def on_reset_callback(env: Union[Env, CommonroadEnv], elapsed_time: float):
-        if env.observation_dict["is_goal_reached"][0]:
+        if env.observation_dict["is_goal_reached"][0] and not env.observation_dict["is_collision"][0]:
             LOGGER.info("Goal reached")
             os.makedirs(solution_path, exist_ok=True)
-
-            # accelerations = np.array([state.acceleration for state in env.ego_action.vehicle.state_list])
-            # acceleration_ys = np.array([state.acceleration_y for state in env.ego_action.vehicle.state_list])
-            # jerk_long = np.diff(accelerations) / env.scenario.dt
-            # jerk_lat = np.diff(acceleration_ys) / env.scenario.dt
-            # import matplotlib.pyplot as plt
-            # plt.figure()
-            # plt.subplot(2, 2, 1)
-            # plt.title("acceleration")
-            # plt.plot(accelerations)
-            # plt.subplot(2, 2, 2)
-            # plt.title("acceleration_y")
-            # plt.plot(acceleration_ys)
-            # plt.subplot(2, 2, 3)
-            # plt.title("jerk_long")
-            # plt.plot(np.abs(jerk_long))
-            # plt.subplot(2, 2, 4)
-            # plt.title("jerk_lat")
-            # plt.plot(np.abs(jerk_lat))
-            # plt.savefig("acceleration_curves.png", dpi=300)
             solution_valid = create_solution(env, solution_path, cost_function, computation_time=elapsed_time)
         else:
             goal = env.planning_problem.goal
@@ -229,23 +196,18 @@ def solve_scenarios(test_path: str, model_path: str, algo: str, solution_path: s
         hyperparams = yaml.load(f, Loader=yaml.Loader)
 
     normalize = hyperparams["normalize"]
-    if normalize:
-        LOGGER.debug("Loading saved running average")
-        vec_normalize_path = os.path.join(model_path, "vecnormalize.pkl")
-        if os.path.exists(vec_normalize_path):
-            env = VecNormalize.load(vec_normalize_path, env)
-        else:
-            raise FileNotFoundError  # vecnormalize.pkl not found
 
-    model = load_model(model_path, algo)
+    model, env = load_model_and_vecnormalize(model_path, algo, normalize, env)
 
     obs = env.reset()
-    env.render()
+    if render:
+        env.render()
     while True:
         action, _states = model.predict(obs, deterministic=True)
         try:
-            env.render()
             obs, reward, done, info = env.step(action)
+            if render:
+                env.render()
             LOGGER.info(f"Step: {env.venv.envs[0].current_step}, \tReward: {reward}, \tDone: {done}")
             if info[0].get("out_of_scenarios", False):
                 break
@@ -303,25 +265,25 @@ def write_solution_file(scenario: Scenario,
         for state in reconstructed_trajectory.state_list:
             state.orientation = np.arctan2(state.velocity_y, state.velocity)
 
-        plt.figure(figsize=(20, 20))
-        # plt.subplot(2, 1, 1)
-        draw_object(scenario, plot_limits=[-50, 50, -50, 50])
-        # draw_object(planning_problem_set)
-        planned_state_list = planned_list
-        plt.plot(*np.array([state.position for state in planned_state_list]).T,
-                 color='black', marker='o', markersize=0.2, zorder=20, linewidth=0.5, label='planned trajectories')
-        plt.plot(*np.array([state.position for state in reconstructed_trajectory.state_list]).T,
-                 color='blue', marker='o', markersize=0.2, zorder=20, linewidth=0.5,
-                 label='reconstructed trajectories')
-        plt.legend()
-        plt.gca().set_aspect('equal')
+        # plt.figure(figsize=(20, 20))
+        # # plt.subplot(2, 1, 1)
+        # draw_object(scenario, plot_limits=[-50, 50, -50, 50])
+        # # draw_object(planning_problem_set)
+        # planned_state_list = planned_list
+        # plt.plot(*np.array([state.position for state in planned_state_list]).T,
+        #          color='black', marker='o', markersize=0.2, zorder=20, linewidth=0.5, label='planned trajectories')
+        # plt.plot(*np.array([state.position for state in reconstructed_trajectory.state_list]).T,
+        #          color='blue', marker='o', markersize=0.2, zorder=20, linewidth=0.5,
+        #          label='reconstructed trajectories')
+        # plt.legend()
+        # plt.gca().set_aspect('equal')
         # plt.subplot(2, 1, 2)
         # plt.title("orientation")
         # plt.plot([state.orientation for state in planned_state_list], color="black")
         # plt.plot([state.orientation for state in reconstructed_trajectory.state_list], color="blue")
 
         # plt.savefig("trajectories.png", dpi=300)
-        plt.show()
+        # plt.show()
         return
 
     if solution_valid:

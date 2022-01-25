@@ -1,17 +1,3 @@
-commonroad-v0:
-  normalize: true
-  # n_envs: 8
-  # n_timesteps: !!float 1e4
-  policy: 'MlpPolicy'
-  n_steps: 2048
-  nminibatches: 32
-  lam: 0.95
-  gamma: 0.99
-  noptepochs: 10
-  ent_coef: 0.0
-  learning_rate: !!float 5e-4
-  cliprange: 0.2
-
 commonroad-v1:
   normalize: true
   # n_envs: 8

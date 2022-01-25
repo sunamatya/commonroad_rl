@@ -29,7 +29,7 @@ def get_all_connected_lanelets(scenario: Scenario) -> dict:
     return merged_lanelet_dict
 
 
-def generate_reset_config(scenario: Scenario) -> dict:
+def generate_reset_config(scenario: Scenario, open_lane_ends) -> dict:
     """
     Generate a dict of reset configurations which contains obstacle lanelet ids, road edge, collision checker,
     lanelet boundary and lanelet connection dict.
@@ -38,7 +38,7 @@ def generate_reset_config(scenario: Scenario) -> dict:
     :return:
     """
     (left_road_edge_lanelet_id, left_road_edge, right_road_edge_lanelet_id, right_road_edge) = get_road_edge(scenario)
-    _, lanelet_boundary = create_road_boundary_obstacle(scenario, method="obb_rectangles")
+    _, lanelet_boundary = create_road_boundary_obstacle(scenario, method="obb_rectangles", open_lane_ends=open_lane_ends)
     connected_lanelet_dict = get_all_connected_lanelets(scenario)
 
     meta_scenario = copy.deepcopy(scenario)

@@ -18,15 +18,19 @@ class CommonRoadVecEnv(DummyVecEnv):
     def set_on_reset(self, on_reset_callback: Callable[[Env, float], None]):
         self.on_reset = on_reset_callback
 
-    def reset(self):
+    def reset(self, **kwargs):
         self.start_times = np.array([time.time()] * self.num_envs)
-        return super().reset()
+        # copied from DummyVecEnv to enable reset with kwargs
+        for env_idx in range(self.num_envs):
+            obs = self.envs[env_idx].reset(**kwargs)
+            self._save_obs(env_idx, obs)
+        return self._obs_from_buf()
 
     def step_wait(self):
         out_of_scenarios = False
         for env_idx in range(self.num_envs):
             (obs, self.buf_rews[env_idx], self.buf_dones[env_idx], self.buf_infos[env_idx],) = self.envs[env_idx].step(
-                self.actions[env_idx])
+                np.squeeze(self.actions[env_idx]))
             if self.buf_dones[env_idx]:
                 # save final observation where user can get it, then reset
                 self.buf_infos[env_idx]["terminal_observation"] = obs

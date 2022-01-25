@@ -13,5 +13,11 @@
 * Johannes Kaiser
 * Hanna Krasowski
 * Zygimantas Marcinkus
+* Daniel Tar
+* Xun Wang
+* Yingye Xin
 * Yang Zhang
 * Gabriel Wiedon
+* Luis Gressenbuch
+* Amir Esmailpour
+* Guyue Huang

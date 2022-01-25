@@ -1,7 +1,6 @@
 # Note: OpenAI uses 16 mpi workers for training on atari
 # in practice it is run with with 4 workers
 atari:
-  n_timesteps: !!float 1e7
   policy: 'CnnPolicy'
   timesteps_per_batch: 512
   max_kl: 0.001

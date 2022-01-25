@@ -870,7 +870,7 @@ class Navigator:
         )
         # rotate matrix arond orientation, so
         vectors_to_ref, _ = cls._rotate_2darray_by_orientation(
-            orient=orientation_ego, twodim_array=vectors_to_ref
+            orient=-orientation_ego, twodim_array=vectors_to_ref
         )
         return vectors_to_ref, orientations_ref
 

@@ -5,44 +5,43 @@ from commonroad_rl.gym_commonroad.action import *
 from commonroad_rl.gym_commonroad.action.action import _rotate_to_curvi
 from commonroad_rl.tests.common.marker import *
 
-
 @pytest.mark.parametrize(
     ("action", "expected_position"),
     [
         (
-                0,
+                np.array([0, 2]),
                 np.array([168.75, 0.0]),
         ),
         (
-                1,
+                np.array([1, 2]),
                 np.array([96.875, 0.0]),
         ),
         (
-                2,
+                np.array([2, 2]),
                 np.array([25.00, 0.0]),
         ),
         (
-                3,
+                np.array([3, 2]),
                 np.array([-46.875, 0.0]),
         ),
         (
-                4,
+                np.array([4, 2]),
                 np.array([-118.75, 0.0]),
         ),
         (
-                5,
+                np.array([2, 0]),
                 np.array([25, 143.75]),
         ),
         (
-                6,
+                np.array([2, 1]),
                 np.array([25, 71.875]),
         ),
         (
-                7,
+                np.array([2, 3]),
                 np.array([25, -71.875]),
         ),
         (
-                8,
+                np.array([2, 4]),
                 np.array([25, -143.75]),
         ),
     ],
@@ -213,3 +212,45 @@ def test_curvi_rotation(vector: np.ndarray, pos: np.ndarray, rotated_vector: np.
 
     res = _rotate_to_curvi(vector, curvi, pos)
     assert np.allclose(res, rotated_vector, atol=1.e-3)
+
+
+@pytest.mark.parametrize(
+    ("vehicle_model", "expected_value"),
+    [
+        (VehicleModel.PM, np.array([11.5, 11.5])),
+        (VehicleModel.KS, np.array([0.4, 11.5])),
+        (VehicleModel.YawRate, np.array([0.5, 11.5]))
+    ]
+)
+@unit_test
+@functional
+def test_continuous_action_yaw_rate_rescale(vehicle_model, expected_value):
+    vehicle_params = {
+        "vehicle_type": 2,  # VehicleType.BMW_320i
+        "vehicle_model": vehicle_model,  # 0: PM, 1: ST, 2: KS, 3: MB, 4: YawRate
+    }
+    action_configs = {
+        "action_type": "continuous",
+        "action_base": "acceleration" # acceleration; jerk
+    }
+
+    action = ContinuousAction(vehicle_params, action_configs)
+    initial_state = State(
+        **{
+            "position": np.array([0., 0.]),
+            "velocity": 23.,
+            "velocity_y": 0,
+            "orientation": 0.0,
+            "time_step": 0,
+            "acceleration": 0.0,
+            "acceleration_y": 0.0,
+        })
+
+
+    with pytest.raises(AssertionError):
+        action.rescale_action(np.array([1., 1.]))
+    action.reset(initial_state, dt=1.0)
+
+    scaled_action = action.rescale_action(np.array([1., 1.]))
+
+    assert np.allclose(scaled_action, expected_value)

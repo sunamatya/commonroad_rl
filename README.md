@@ -1,9 +1,8 @@
 # CommonRoad-RL
 
-This repository contains a software package to solve motion planning problems on [CommonRoad](https://commonroad.in.tum.de) using Reinforcement Learning algorithms. We currently use the implementation for the RL algorithms from [OpenAI Stable Baselines](https://stable-baselines.readthedocs.io/en/master/), but the package can be run with any standard (OpenAI Gym compatible) RL implementations.
+This repository contains a software package to solve motion planning problems on [CommonRoad](https://commonroad.in.tum.de) using Reinforcement Learning algorithms. We currently use the implementation for the RL algorithms from [Stable Baselines](https://stable-baselines.readthedocs.io/en/master/), but the package can be run with any standard (OpenAI Gym compatible) RL implementations.
 
 ## CommonRoad-RL in a nutshell
-
 ```python
 import gym
 import commonroad_rl.gym_commonroad
@@ -12,7 +11,7 @@ import commonroad_rl.gym_commonroad
 env = gym.make("commonroad-v1",
                action_configs={"action_type": "continuous"},
                goal_configs={"observe_distance_goal_long": True, "observe_distance_goal_lat": True},
-               surrounding_configs={"observe_lidar_circle_surrounding": True, "lidar_circle_num_beams": 20},
+               surrounding_configs={"observe_lane_circ_surrounding": True, "lane_circ_sensor_range_radius": 100.},
                reward_type="sparse_reward",
                reward_configs_sparse={"reward_goal_reached": 50., "reward_collision": -100})
 
@@ -26,7 +25,6 @@ for _ in range(500):
         observation = env.reset()
 env.close()
 ```
-
 ## Folder structure
 ```
 commonroad-rl                                           
@@ -46,16 +44,16 @@ commonroad-rl
 │  ├─ tools                             # Tools to validate, visualize and analyze CommonRoad .xml files, as well as preprocess and convert to .pickle files.                                         
 │  ├─ utils_run                         # Utility functions to run training, tuning and evaluating files                                      
 │  ├─ README.md                                                      
-│  ├─ evaluate_model.py                 # Script to evaluate a trained RL model on specific scenarios and visualize the scenario                
-
+│  ├─ evaluate_model.py                 # Script to evaluate a trained RL model on specific recorded scenarios and visualize the scenario   
+│  ├─ evaluate_model_sumo.py            # Script to evaluate a trained RL model on interactive scenarios and visualize the scenario              
 │  ├─ generate_solution.py              # Script to genearte CommonRoad solution files from trained RL models.
 │  ├─ train_model.py                    # Script to train RL model or optimize hyperparameters or environment configurations           
 │  ├─ sensitivity_analysis.py           # Script to run sensitivity analysis for a trained model
 │  └─ plot_learning_curves.py           # Plot learning curves with provided training log files.                
 ├─ scripts                              # Bash scripts to install all dependencies, train and evaluate RL models, as well as generate CommonRoad solution files from trained RL models.
-├─ README.md                                                           
+├─ README.md                                                        
 ├─ environment.yml                                      
-└─ setup.py                                       
+└─ setup.py                                      
 ```
 ## Installation
 
@@ -71,9 +69,9 @@ This project should be run with conda. Make sure it is installed before proceedi
 # for minconda
 ~/miniconda3/bin/conda init
 ```
-2. set up git & ssh keys, then clone this repository
+2. clone this repository
 ```
-git clone git@gitlab.lrz.de:ss20-mpfav-rl/commonroad-rl.git
+git clone https://gitlab.lrz.de/tum-cps/commonroad-rl.git
 ```
 3. install build packages
 ```
@@ -83,6 +81,8 @@ sudo apt-get install build-essential make cmake
 4. setup a new conda env (or install packages to an existing conda env e.g. myenv `conda env update --name myenv --file environment.yml`)
 ```
 conda env create -n cr37 -f environment.yml
+git submodule init
+git submodule update --recursive || exit_with_error "Update submodules failed"
 ```
 5. (optional) install pip packages for the docs. If you want to use the jupyter notebook, also install jupyter.
 ```
@@ -157,10 +157,6 @@ If you use CommonRoad-RL in your paper, please cite:
 	year = {2021},
 }
 ```
-
-Configurations and trained models used in our experiments in the paper can be downloaded [here](https://nextcloud.in.tum.de/index.php/s/n7oEr9dsyrqjgPZ).
-
-Models trained with current version of code using the same configurations can be downloaded [here](https://nextcloud.in.tum.de/index.php/s/F8C9n2nWmfJy9pr)
 
 ## Contact:
 commonroad@lists.lrz.de

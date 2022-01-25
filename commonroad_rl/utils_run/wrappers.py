@@ -81,15 +81,21 @@ class IncreaseTimeStepWrapper(gym.Wrapper):
     """
     Wrapper for increasing the time step size of the environment
     """
-    def __init__(self, env, num_steps: int = 10):
+    def __init__(self, env):
         """
         initialization for wrapper
         :param env: environment to wrap
-        :param num_steps: amount of steps to be taken until the agent can select the next action
         """
         super().__init__(env)
         self.env = env
-        self.num_steps = num_steps
+        self.planning_horizon = self.env.action_configs["planning_horizon"]
+        self.num_steps = None
+
+    def reset(self, **kwargs):
+        observation = self.env.reset(**kwargs)
+        self.num_steps = int(self.planning_horizon / self.env.scenario.dt)
+
+        return observation
 
     def step(self, action):
         """

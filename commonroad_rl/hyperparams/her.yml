@@ -1,5 +1,4 @@
-commonroad-v0:
-  n_timesteps: !!float 20000
+commonroad-v1:
   policy: 'MlpPolicy'
   model_class: 'sac'
   n_sampled_goal: 4

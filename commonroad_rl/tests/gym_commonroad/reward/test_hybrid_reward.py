@@ -26,7 +26,8 @@ configs = {
         "reward_off_road": -20.,
         "reward_friction_violation": -30.,
         "reward_time_out": -10.,
-        "reward_get_close_coefficient": 0.5,
+        "reward_closer_to_goal_long": 0.5,
+        "reward_closer_to_goal_lat": 2.5,
         "reward_get_close_goal_time": 0.5,
         "reward_close_goal_orientation": 0.5,
         "reward_close_goal_velocity": 0.5
@@ -70,7 +71,7 @@ def test_termination_reward():
 
 @unit_test
 @functional
-def test_distance_reward():
+def test_goal_distance_reward():
     reward = HybridReward(configs)
     observations = {
         "distance_goal_long_advance": [3.],
@@ -149,10 +150,65 @@ def test_goal_orientation_reward():
     }
     assert math.isclose(reward.goal_orientation_reward(observations), (math.exp(-1.0 / np.pi) * 0.5))
 
+
 @pytest.mark.parametrize(
-    ("benchmark_id"),
-    [("FRA_Miramas-5_1_T-1"),
-     ("USA_US101-14_1_T-1")],
+    ("observations", "expected_reward"),
+    [(
+            {
+                "v_ego": np.array([23., 0.]),
+                "lane_based_v_rel": np.array([0., 0., 0., 0., -11.5, 0.]),
+                "lane_based_p_rel": np.array([0., 0., 0., 0., 10., 0.]),
+                "lane_change": np.array([0.])
+            },
+            -0.05510302167
+    ),
+        (
+        {
+            "v_ego": np.array([23.]),
+            "lane_based_v_rel": np.array([0., 0., 0., 0., -11.5, 0.]),
+            "lane_based_p_rel": np.array([0., 0., 0., 0., 10., 0.]),
+            "lane_change": np.array([0.])
+        },
+        -0.05510302167
+    ),
+     (
+         {
+             "v_ego": np.array([23.]),
+             "lane_based_v_rel": np.array([0., 0., 0., 0., 1., 0.]),
+             "lane_based_p_rel": np.array([0., 0., 0., 0., 10., 0.]),
+             "lane_change": np.array([0.])
+         },
+         0.
+     ),
+     (
+         {
+             "v_ego": np.array([11.5]),
+             "lane_based_v_rel": np.array([0., -11.5, 0., 0., 0., 0.]),
+             "lane_based_p_rel": np.array([0., 10., 0., 0., 10., 0.]),
+             "lane_change": np.array([1.])
+         },
+         -0.05510302167
+     )],
+)
+@unit_test
+@functional
+def test_safe_distance_reward(observations, expected_reward):
+
+    configs["surrounding_configs"]["observe_lane_change"] = True
+    configs["surrounding_configs"]["observe_lane_rect_surrounding"] = True
+    configs["surrounding_configs"]["lane_rect_sensor_range_length"] = 100.
+    configs["surrounding_configs"]["lane_rect_sensor_range_width"] = 8.
+    configs["reward_configs_hybrid"]["reward_safe_distance_coef"] = -1.
+
+    reward = HybridReward(configs)
+
+    assert math.isclose(reward.safe_distance_reward(observations), expected_reward)
+
+
+@pytest.mark.parametrize(
+    "benchmark_id",
+    ["FRA_Miramas-5_1_T-1",
+     "USA_US101-14_1_T-1"],
 )
 @module_test
 @nonfunctional
@@ -177,6 +233,7 @@ def test_reward_calculation(benchmark_id):
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
     config = config["env_configs"]
+    config["vehicle_params"]["vehicle_model"] = 0
     reward = HybridReward(config)
     ego_action: DiscretePMJerkAction = DiscretePMJerkAction(config["vehicle_params"], 5, 5)
     observation_collector = ObservationCollector(config)

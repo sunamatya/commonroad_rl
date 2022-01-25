@@ -3,12 +3,15 @@ from typing import List, Union, Optional
 
 import commonroad_dc.pycrcc as pycrcc
 import numpy as np
-from commonroad.geometry.shape import Polygon
-from commonroad.scenario.obstacle import Obstacle
-from commonroad.scenario.trajectory import State
-from commonroad.scenario.scenario import ScenarioID
+import yaml
+from commonroad.geometry.shape import Polygon, Rectangle
+from commonroad.prediction.prediction import TrajectoryPrediction
+from commonroad.scenario.obstacle import Obstacle, DynamicObstacle, ObstacleType
+from commonroad.scenario.trajectory import State, Trajectory
+from commonroad.scenario.scenario import ScenarioID, Scenario
 from commonroad_dc.collision.collision_detection.pycrcc_collision_dispatch import create_collision_object, \
     create_collision_checker
+from commonroad_rl.gym_commonroad.constants import PATH_PARAMS
 from shapely.geometry import Polygon as PolygonShapely
 from commonroad_rl.gym_commonroad.action.vehicle import ContinuousVehicle
 from commonroad_rl.gym_commonroad.observation import SurroundingObservation, ObservationCollector
@@ -105,35 +108,35 @@ scenario_2, _, _, _ = prepare_for_surrounding_test(
         "ego_state", "observe_lane_rect_surrounding", "observe_lane_circ_surrounding", "p_rel_expected",
         "v_rel_expected"), [(State(**{"time_step": 50, "position": np.array([127.50756356637483, -50.69294785562317]),
                                       "orientation": 4.298126916546023, "velocity": 8.343911610829114}), True, False,
-                             [50.1223503 ,17.53095357,50.1223503 ,50.1223503 ,50.1223503 ,50.1223503],
+                             [50.1223503, 17.53095357, 50.1223503, 50.1223503, 50.1223503, 50.1223503],
                              [0.0, -0.3290005752341578, 0.0, 0.0, 0.0, 0.0]), (
                                     State(**{"time_step": 51,
                                              "position": np.array([127.39433877716928, -50.9499165494171]),
                                              "orientation": 4.296344007588243, "velocity": 8.558071157124918}), True,
                                     False,
-                                    [50.1223503 ,17.44662997,50.1223503 ,50.1223503 ,50.1223503 ,50.1223503 ],
+                                    [50.1223503, 17.44662997, 50.1223503, 50.1223503, 50.1223503, 50.1223503],
                                     [0.0, -0.0348669273743365, 0.0, 0.0, 0.0, 0.0]), (
                                     State(**{"time_step": 52, "position": [127.2789061588074, -51.210826963166035],
                                              "orientation": 4.294731018487505, "velocity": 8.560948563466251}), True,
-                                    False, [50.1223503,17.3700263,50.1223503,50.1223503,50.1223503,50.1223503],
+                                    False, [50.1223503, 17.3700263, 50.1223503, 50.1223503, 50.1223503, 50.1223503],
                                     [0.0, 0.05249202534491637, 0.0, 0.0, 0.0, 0.0]), (
                                     State(**{"time_step": 43,
                                              "position": np.array([128.2222609335789, -49.022624022869934]),
                                              "orientation": 4.319904886182895, "velocity": 7.082343029302184}), False,
                                     True,
-                                    [50.        ,18.20347091,50.        ,50.        ,47.40590347,50.        ],
+                                    [50., 18.20347091, 50., 50., 47.40590347, 50.],
                                     [0.0, -2.025488953984791, 0.0, 0.0, 2.6653220542271576, 0.0],), (
                                     State(**{"time_step": 44,
                                              "position": np.array([128.13057639473206, -49.24300781209363]),
                                              "orientation": 4.315381265190625, "velocity": 7.291671591323439, }), False,
                                     True,
-                                    [50.        ,18.05391643,50.        ,50.        ,47.63507943,50.        ],
+                                    [50., 18.05391643, 50., 50., 47.63507943, 50.],
                                     [0.0, -1.7668531163933068, 0.0, 0.0, 2.529247893570327, 0.0],), (
                                     State(**{"time_step": 45,
                                              "position": np.array([128.03441395825942, -49.47140451195109]),
                                              "orientation": 4.31163016190567, "velocity": 7.668769571559476}), False,
                                     True,
-                                    [50.        ,17.92129415,50.        ,50.        ,47.8514526 ,50.        ],
+                                    [50., 17.92129415, 50., 50., 47.8514526, 50.],
                                     [0.0, -1.33718633344232, 0.0, 0.0, 2.2206628198837794, 0.0],), ], )
 @module_test
 @functional
@@ -148,9 +151,13 @@ def test_get_surrounding_obstacles_lane_based(ego_state, observe_lane_rect_surro
         "reward_configs_hybrid": {"reward_safe_distance_coef": -1.},
         "surrounding_configs": {"observe_lane_rect_surrounding": observe_lane_rect_surrounding,
                                 "observe_lane_circ_surrounding": observe_lane_circ_surrounding,
-                                "lane_rect_sensor_range_length": 100., "lane_rect_sensor_range_width": 7.,
+                                "lane_rect_sensor_range_length": 100.,
+                                "lane_rect_sensor_range_width": 7.,
                                 "lane_circ_sensor_range_radius": 50.0,
-                                "observe_is_collision": False, "observe_lane_change": False}})
+                                "observe_is_collision": False,
+                                "observe_lane_change": False,
+                                "fast_distance_calculation": True}})
+
     ego_vehicle = ContinuousVehicle({"vehicle_type": 2, "vehicle_model": 2})
     ego_vehicle.reset(ego_state, dt=0.1)
 
@@ -175,6 +182,57 @@ def test_get_surrounding_obstacles_lane_based(ego_state, observe_lane_rect_surro
         f"differs: {np.array2string(np.array(p_rel), separator=',')} expected {np.array2string(np.array(p_rel_expected), separator=',')}: {np.isclose(np.array(p_rel), np.array(p_rel_expected), atol=1e-2)}"
     assert np.allclose(np.array(v_rel), np.array(v_rel_expected), atol=1e-2), \
         f"differs: {np.array2string(np.array(v_rel), separator=',')} expected {np.array2string(np.array(v_rel_expected), separator=',')}: {np.isclose(np.array(v_rel), np.array(v_rel_expected), atol=1e-2)}"
+
+
+@unit_test
+@functional
+def test_obstacle_detection_lane_based():
+    """
+    Test for
+    method at the initial step
+    """
+
+    surrounding_observation = SurroundingObservation(
+        configs={
+            "reward_configs_hybrid": {"reward_safe_distance_coef": -1.},
+            "surrounding_configs": {"observe_lane_circ_surrounding": True,
+                                    "lane_circ_sensor_range_radius": 100.,
+                                    "observe_is_collision": False,
+                                    "observe_lane_change": False,
+                                    "fast_distance_calculation": False}
+        }
+    )
+
+    ego_vehicle = ContinuousVehicle({"vehicle_type": 2, "vehicle_model": 4})
+    ego_state = State(**{
+        "position": np.array([-262.1121295, 9.5967584]),
+        "orientation": -0.013548497271880677,
+        "velocity": 37.07059064327494,
+        "steering_angle": 5.203479437594755e-05,
+        "yaw_rate": -0.010336290633383515,
+        "acceleration": 11.422267557169176,
+        "time_step": 56,
+    })
+
+    ego_vehicle.reset(ego_state, dt=0.1)
+    from commonroad.common.file_reader import CommonRoadFileReader
+    file_path = os.path.join(XML_PATH, "DEU_LocationDUpper-8_2_T-1.xml")
+    scenario, _ = CommonRoadFileReader(file_path).open(lanelet_assignment=True)
+
+    # find ego lanelet here because multiple observations need it
+    ego_lanelet_id = 2
+    ego_lanelet = scenario.lanelet_network.find_lanelet_by_id(ego_lanelet_id)
+    local_ccosy, _ = ObservationCollector.get_local_curvi_cosy(scenario.lanelet_network, ego_lanelet_id, None,
+                                                               max_lane_merge_range=1000.)
+    collision_checker = create_collision_checker(scenario)
+    surrounding_observation.observe(scenario, ego_vehicle, ego_state.time_step,
+                                    connected_lanelet_dict={1: {1}, 2: {2}, 3: {3}}, ego_lanelet=ego_lanelet,
+                                    collision_checker=collision_checker, local_ccosy=local_ccosy)
+    detected_obstacles = surrounding_observation.detected_obstacles
+    detected_ids = [obs.obstacle_id if obs is not None else None for obs in detected_obstacles]
+    expected_ids = [17, None, 18, 14, 12, 15]
+
+    assert detected_ids == expected_ids
 
 
 @pytest.mark.parametrize(("ego_state", "prev_rel_pos", "p_rel_expected", "p_rel_rate_expected"), [(
@@ -214,7 +272,7 @@ def test_get_surrounding_obstacles_lidar_circle(ego_state, prev_rel_pos, p_rel_e
                                 "lidar_circle_num_beams": 20,
                                 "observe_is_collision": False,
                                 "observe_lane_rect_surrounding": False, "observe_lane_circ_surrounding": False,
-                                "observe_lane_change": False}})
+                                "observe_lane_change": False, "observe_relative_priority": True}})
     ego_vehicle = ContinuousVehicle({"vehicle_type": 2, "vehicle_model": 0})
     ego_vehicle.reset(ego_state, dt=0.1)
 
@@ -531,3 +589,59 @@ def test_get_obstacle_lights(obs: List[Optional[Obstacle]], expected_lights: Lis
     detected_lights = observation.observation_dict["vehicle_signals"]
 
     assert all(np.equal(detected_lights, expected_lights))
+
+
+@pytest.mark.parametrize("preprocess", [True])
+@module_test
+@functional
+def test_continuous_collision_checking(preprocess):
+    # construct a scenario with one dynamic obstacle
+    scenario = Scenario(dt=1, scenario_id=ScenarioID("test"))
+    obstacle_shape = Rectangle(width=2, length=5)
+    state_list = [
+        State(position=np.array([10., 0.]), velocity=10., orientation=0., time_step=1),
+        State(position=np.array([20., 0.]), velocity=10., orientation=0., time_step=2)
+    ]
+    dynamic_obstacle = DynamicObstacle(scenario.generate_object_id(),
+                                       ObstacleType.CAR,
+                                       obstacle_shape,
+                                       State(position=np.array([0., 0.]), velocity=10., orientation=0., time_step=0),
+                                       TrajectoryPrediction(Trajectory(1, state_list), obstacle_shape))
+
+    scenario.add_objects(dynamic_obstacle)
+
+    # construct observation collector and collision checker
+    config_file = PATH_PARAMS["configs"]["commonroad-v1"]
+    with open(config_file, "r") as config_file:
+        config = yaml.safe_load(config_file)
+
+        # Assume default environment configurations
+    configs = config["env_configs"]
+    observation_collector = ObservationCollector(configs)
+    observation_collector._scenario = scenario
+    observation_collector._benchmark_id = "test"
+    import time
+    t1 = time.time()
+    observation_collector._update_collision_checker()
+    print(f"Elapsed time {time.time()-t1}")
+
+    # ego vehicle
+    vehicle_params = {
+        "vehicle_type": 2,  # VehicleType.BMW_320i
+        "vehicle_model": 0,  # 0: VehicleModel.PM; 2: VehicleModel.KS;
+    }
+
+    initial_state = State(position=np.array([5., -5.]), velocity=0., velocity_y=10., orientation=np.pi/2, time_step=0)
+    dt = 1.0
+
+    # Not to do anything, just continue the way with the given velocity
+    vehicle = ContinuousVehicle(vehicle_params)
+    vehicle.reset(initial_state, dt)
+    next_state = State(position=np.array([5., 5.]), velocity=0., velocity_y=10., orientation=np.pi/2, time_step=1)
+    vehicle.set_current_state(next_state)
+
+    assert SurroundingObservation._check_collision(observation_collector._collision_checker, vehicle) == preprocess
+
+
+
+

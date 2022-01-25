@@ -1,19 +1,18 @@
 from collections import defaultdict, OrderedDict
 from typing import Union, Dict, List, Tuple
-
-import commonroad_dc.pycrcc as pycrcc
 import gym
-import matplotlib.pyplot as plt
 import numpy as np
 from commonroad.scenario.lanelet import Lanelet
 from commonroad.scenario.obstacle import State
 from commonroad.scenario.scenario import Scenario
-from commonroad_dc.collision.visualization import draw_dispatch as crdc_draw_dispatch
+from commonroad.visualization.mp_renderer import MPRenderer, ZOrders
+from commonroad.visualization.util import LineDataUnits
 from commonroad_rl.gym_commonroad.action.vehicle import Vehicle
 from commonroad_rl.gym_commonroad.observation.observation import Observation
 from commonroad_rl.gym_commonroad.observation.goal_observation import GoalObservation
 from commonroad_rl.gym_commonroad.utils.navigator import Navigator
 from numpy import ndarray
+import commonroad_dc.pycrcc as pycrcc
 from commonroad_dc.pycrccosy import CurvilinearCoordinateSystem
 from commonroad_dc.geometry.util import compute_curvature_from_polyline, compute_pathlength_from_polyline
 from shapely.geometry import Point, LineString
@@ -47,8 +46,7 @@ class LaneletNetworkObservation(Observation):
         self.distances_route_reference_path: List[float] = configs.get("distances_route_reference_path")
         # reference lanelets waypoints configs
         self.observe_route_multilanelet_waypoints: bool = configs.get("observe_route_multilanelet_waypoints")
-        self.distances_and_ids_multilanelet_waypoints: \
-            Tuple(List[float], List(int)) = configs.get("distances_and_ids_multilanelet_waypoints")
+        self.distances_and_ids_multilanelet_waypoints: Tuple[List[float], List[int]] = configs.get("distances_and_ids_multilanelet_waypoints")
         # distance to reference path
         self.observe_distance_togoal_via_referencepath: bool = configs.get("observe_distance_togoal_via_referencepath")
 
@@ -183,43 +181,57 @@ class LaneletNetworkObservation(Observation):
 
         return self.observation_dict
 
-    def draw(self, render_configs: Dict, ego_vehicle: Vehicle, road_edge: Union[None, Dict] = None, ego_lanelet: Union[Lanelet, None] = None, navigator: Union[Navigator, None] = None):
+    def draw(self, render_configs: Dict, render: MPRenderer, ego_vehicle: Vehicle, road_edge: Union[None, Dict] = None,
+             ego_lanelet: Union[Lanelet, None] = None, navigator: Union[Navigator, None] = None):
         """ Method to draw the observation """
         # Draw road boundaries
         if render_configs["render_road_boundaries"]:
-            crdc_draw_dispatch.draw_object(road_edge["boundary_collision_object"],
-                                           draw_params={"collision": {"rectobb": {"facecolor": "yellow"}}})
+            road_edge["boundary_collision_object"].draw(render)
         # Plot ego lanelet center vertices
         if render_configs["render_ego_lanelet_center_vertices"]:
-            plt.plot(ego_lanelet.center_vertices[:, 0], ego_lanelet.center_vertices[:, 1], color="pink", zorder=5)
+            line = LineDataUnits(ego_lanelet.center_vertices[:, 0], ego_lanelet.center_vertices[:, 1],
+                                 zorder=ZOrders.LANELET_LABEL, markersize=1., color="pink",
+                                 marker="x", label="Ego center vertices")
+            render.dynamic_artists.append(line)
 
         # Extrapolated future positions
         if self.observe_static_extrapolated_positions and render_configs["render_static_extrapolated_positions"]:
             for future_pos in self._extrapolation_static_pos:
-                plt.plot(future_pos[0], future_pos[1], color="r", marker="x", zorder=21)
+                render.dynamic_artists.append(
+                    LineDataUnits(future_pos[0], future_pos[1], color="r", marker="x",
+                                  zorder=21, label="static_extrapolated_positions"))
+
         if self.observe_dynamic_extrapolated_positions and render_configs["render_dynamic_extrapolated_positions"]:
             for future_pos in self._extrapolation_dynamic_pos:
-                plt.plot(future_pos[0], future_pos[1], color="b", marker="x", zorder=21)
+                render.dynamic_artists.append(
+                    LineDataUnits(future_pos[0], future_pos[1], color="b", marker="x",
+                                  zorder=21, label="dynamic_extrapolated_positions"))
 
         # Plot Navigator Observations in non-local (global) CoSy
         if self.observe_route_reference_path and render_configs["render_ccosy_nav_observations"]:
             pos, _ = navigator.get_waypoints_of_reference_path(
                 ego_vehicle.state, distances_ref_path=self.distances_route_reference_path,
-                observation_cos=Navigator.CosyVehicleObservation.LOCALCARTESIAN   # coordinate axes for plot in direction of global CoSy
+                observation_cos=Navigator.CosyVehicleObservation.LOCALCARTESIAN
+                # coordinate axes for plot in direction of global CoSy
             )
             pos_global = ego_vehicle.state.position + pos  # back to non local CoSy Origin
-            plt.plot(pos_global[:, 0], pos_global[:, 1], zorder=22, marker='v', color='yellow')
+            render.dynamic_artists.append(
+                LineDataUnits(pos_global[:, 0], pos_global[:, 1], zorder=22, marker='v',
+                              color='yellow', label="ccosy_nav_observations"))
 
         if self.observe_route_multilanelet_waypoints and render_configs["render_ccosy_nav_observations"]:
             distances, ids = self.distances_and_ids_multilanelet_waypoints
 
             pos, _ = navigator.get_referencepath_multilanelets_waypoints(
                 ego_vehicle.state, distances_per_lanelet=distances, lanelets_id_rel=ids,
-                observation_cos=Navigator.CosyVehicleObservation.LOCALCARTESIAN  # coordinate axes for plot in direction of global CoSy
+                observation_cos=Navigator.CosyVehicleObservation.LOCALCARTESIAN
+                # coordinate axes for plot in direction of global CoSy
             )
             for po in pos:
                 po_global = ego_vehicle.state.position + po  # back to non local CoSy Origin
-                plt.plot(po_global[:, 0], po_global[:, 1], zorder=22, marker='v', color='purple')
+                render.dynamic_artists.append(
+                    LineDataUnits(po_global[:, 0], po_global[:, 1], zorder=22, marker='v',
+                                  color='purple', label="ccosy_nav_observations"))
 
     def _get_relative_future_goal_offsets(self, ego_state: State, sampling_points: List[float], static: bool,
                                           navigator: Navigator) -> Tuple[List[float], List[ndarray]]:

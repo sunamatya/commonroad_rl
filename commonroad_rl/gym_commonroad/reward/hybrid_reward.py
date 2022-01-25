@@ -71,7 +71,6 @@ class HybridReward(Reward):
                 (not self.goal_configs["observe_distance_goal_time"]
                  or observation_dict["distance_goal_time"] == 0)
         ):
-            # raise BaseException("This condition was suspected to never get met in the experiments. raise if this actually happens")
             # Closing in on goal-orientation
             if self.goal_configs["observe_distance_goal_orientation"]:
                 reward += self.goal_orientation_reward(observation_dict)
@@ -138,7 +137,9 @@ class HybridReward(Reward):
         """Reward for getting closer to goal distance"""
         long_advance = observation_dict["distance_goal_long_advance"][0]
         lat_advance = observation_dict["distance_goal_lat_advance"][0]
-        return self.reward_configs["reward_get_close_coefficient"] * (lat_advance * 5 + long_advance)
+
+        return self.reward_configs["reward_closer_to_goal_long"] * long_advance + \
+               self.reward_configs["reward_closer_to_goal_lat"] * lat_advance
 
     @staticmethod
     def _time_to_goal_weight(ego_velocity, distance, goal_time_distance):
@@ -193,31 +194,46 @@ class HybridReward(Reward):
     def safe_distance_reward(self, observation_dict: dict) -> float:
         """Reward for keeping a safe distance to the leading vehicle. If the ego vehicle is changing lanes, not keeping
         a safe distance to the following vehicle is also penalized"""
+        # TODO: fix safe distance reward
+
         reward = 0.0
-        lane_change = self.surrounding_configs["observe_lane_change"] and observation_dict["lane_change"] != 0.0
-        dist_leading = self.max_obs_dist
-        dist_following = self.max_obs_dist
+        a_max = 11.5 # TODO: load a_max from vehicle parameters
+        lane_change = self.surrounding_configs["observe_lane_change"] and observation_dict["lane_change"] > 0.
+        # dist_lead = self.max_obs_dist
+        # dist_follow = self.max_obs_dist
+        # v_rel = [v_rel_left_follow, v_rel_same_follow, v_rel_right_follow, v_rel_left_lead, v_rel_same_lead,
+        #          v_rel_right_lead]
+        # p_rel = [p_rel_left_follow, p_rel_same_follow, p_rel_right_follow, p_rel_left_lead, p_rel_same_lead,
+        #          p_rel_right_lead]
         if self.surrounding_configs["observe_lane_rect_surrounding"] \
                 or self.surrounding_configs["observe_lane_circ_surrounding"]:
-            dist_leading = observation_dict["lane_based_p_rel"][4]
-            dist_following = observation_dict["lane_based_p_rel"][1]
-        elif self.surrounding_configs["observe_lidar_circle_surrounding"]:
-            [dist_leading, dist_following] = observation_dict["dist_lead_follow_rel"]
+            dist_lead = observation_dict["lane_based_p_rel"][4]
+            dist_follow = observation_dict["lane_based_p_rel"][1]
+            v_rel_lead = observation_dict["lane_based_v_rel"][4]
+            v_rel_follow = observation_dict["lane_based_v_rel"][1]
+            v_ego = np.sqrt(np.sum(observation_dict["v_ego"] ** 2))
+            v_lead = v_rel_lead + v_ego
+            v_follow = v_ego - v_rel_follow
+            safe_dist_lead = max((v_ego ** 2 - v_lead ** 2) / (2 * a_max), 4.)
+            safe_dist_follow = max((v_follow ** 2 - v_ego ** 2) / (2 * a_max), 4.)
+        # elif self.surrounding_configs["observe_lidar_circle_surrounding"]:
+        #     [dist_leading, dist_following] = observation_dict["dist_lead_follow_rel"]
+        else:
+            raise NotImplementedError(f"Safe distance reward is only supported for lane-based observations currently!")
 
-        if dist_leading != self.max_obs_dist and \
-                self.reward_configs["safe_distance_threshold"] > dist_leading:
-            reward += self._safe_distance_reward_function(dist_leading)
-        if dist_leading != self.max_obs_dist and \
-                lane_change and dist_following != self.max_obs_dist and \
-                self.reward_configs["safe_distance_threshold"] > dist_following:
-            reward += self._safe_distance_reward_function(dist_following)
+        reward += self._safe_distance_reward_function(dist_lead, safe_dist_lead)
+        if lane_change:
+            reward += self._safe_distance_reward_function(dist_follow, safe_dist_follow)
 
+        assert isinstance(reward, float)
         return reward
 
-    def _safe_distance_reward_function(self, distance: float) -> float:
+    def _safe_distance_reward_function(self, distance: float, safe_distance: float) -> float:
         """Exponential reward function for keeping a safe distance"""
-        return self.reward_configs["reward_safe_distance_coef"] * np.exp(
-            -5 * distance / self.reward_configs["safe_distance_threshold"])
+        if distance < safe_distance:
+            return self.reward_configs["reward_safe_distance_coef"] * np.exp(-5. * distance / safe_distance)
+        else:
+            return 0.
 
     def traffic_sign_reward(self, observation_dict: dict) -> float:
         """Reward for obeying traffic sings"""

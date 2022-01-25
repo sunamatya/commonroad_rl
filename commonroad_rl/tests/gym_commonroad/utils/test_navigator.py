@@ -5,7 +5,7 @@ from commonroad.geometry.shape import Rectangle, Polygon, Circle, ShapeGroup
 from commonroad.planning.goal import GoalRegion
 from commonroad.planning.planning_problem import PlanningProblem
 from commonroad.scenario.lanelet import Lanelet
-from commonroad.scenario.scenario import Scenario
+from commonroad.scenario.scenario import Scenario, ScenarioID
 from commonroad.scenario.trajectory import State
 from commonroad_route_planner.route_planner import RoutePlanner
 
@@ -194,6 +194,52 @@ dummy_time_step = Interval(0.0, 0.0)
                 ]
             ),
         ),
+        # fifth to test the coordinate convertion from rotation matrix
+        (
+            GoalRegion(
+                [
+                    State(
+                        time_step=Interval(1, 1),
+                        orientation=AngleInterval(-np.pi / 2, np.pi / 2),
+                        position=Rectangle(
+                            length=2.0, width=2.0, center=np.array([20.0, 0.0])
+                        ),
+                    )
+                ]
+            ),
+            State(
+                **{
+                    "time_step": 1,
+                    "yaw_rate": 0.0,
+                    "slip_angle": 0.0,
+                    "orientation": np.pi/2,
+                    "position": np.array([1.0, 0.0]),
+                    "velocity": 0.01,
+                    "velocity_y": 0.0,
+                }
+            ),
+            
+            Navigator.CosyVehicleObservation.VEHICLEFRAME,
+            [-100, -0.5, 0, 0.5, 5, 20, 100],
+            np.array(
+                [
+                
+                    [0.0, 1],
+                    [0.0, 0.5],
+                    [0.0, 0.0],
+                    [0.0, -0.5],
+                    [0.0, -5],
+                    [0.0, -19],
+                    [0.0, -19],
+                    
+                ]
+            ),
+            np.array(
+                [
+                    -np.pi/2,-np.pi/2,-np.pi/2,-np.pi/2,-np.pi/2,-np.pi/2,-np.pi/2
+                ]
+            ),
+        ),
     ],
 )
 @functional
@@ -214,7 +260,6 @@ def test_get_waypoints_of_reference_path(
     pos, orients = navigator.get_waypoints_of_reference_path(
         ego_state, distances_ref_path=distances_long, observation_cos=vehicle_cos_used
     )
-
     print(help_allclose(expected_waypoints, pos))
     print(help_allclose(expected_orientations, orients))
 
@@ -736,7 +781,7 @@ def helper_dummy_scenario(goal_region):
         adjacent_left_same_direction=True,
     )
 
-    scenario = Scenario(dt=0.1, benchmark_id="test", scenario_id="DEU_TEST-1_1_T-1")
+    scenario = Scenario(dt=0.1, scenario_id=ScenarioID("DEU_TEST-1_1_T-1"))
     scenario.lanelet_network.add_lanelet(lanelet0)
     scenario.lanelet_network.add_lanelet(lanelet3)
     scenario.lanelet_network.add_lanelet(lanelet1)

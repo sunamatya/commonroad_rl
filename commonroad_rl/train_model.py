@@ -22,8 +22,8 @@ from enum import Enum
 from pprint import pformat
 from stable_baselines.common.base_class import _UnvecWrapper
 from stable_baselines.her import HERGoalEnvWrapper
+from stable_baselines.gail import ExpertDataset
 from stable_baselines import logger
-
 # NUM_PARALLEL_EXEC_UNITS = 4
 # os.environ["OMP_NUM_THREADS"] = str(NUM_PARALLEL_EXEC_UNITS)
 os.environ["KMP_AFFINITY"] = "none"  # "granularity=fine,verbose,compact,1,0"
@@ -102,7 +102,8 @@ def run_stable_baselines_argsparser():
     parser.add_argument("--log-interval", help="Override log interval (default: -1, no change)", default=-1, type=int)
     parser.add_argument("--eval-freq", default=10000, type=int,
                         help="Evaluate the agent every n steps (if negative, no evaluation)")
-    parser.add_argument("--eval-episodes", help="Number of episodes to use for evaluation", default=5, type=int)
+    parser.add_argument("--eval_timesteps", help="Number of timesteps to use for evaluation", default=1000, type=int)
+    parser.add_argument("--eval_episodes", help="Number of episodes to use for evaluation", default=5, type=int)
     parser.add_argument("--save-freq", default=-1, type=int,
                         help="Save the model every n steps (if negative, no checkpoint)")
     parser.add_argument("-f", "--log-folder", help="Log folder", type=str, default="logs")
@@ -190,12 +191,14 @@ def construct_save_path(args):
     return os.path.join(log_path, f"{args.env}_{get_latest_run_id(log_path, args.env) + 1}{uuid_str}")
 
 
-def create_vec_normalized_env(exp_folder: str, env: gym.Env):
+def create_vec_normalized_env(exp_folder: str, env: VecNormalize):
+    if isinstance(env, VecNormalize):
+        env = env.venv
     if os.path.exists(os.path.join(exp_folder, "vecnormalize.pkl")):
-        return VecNormalize.load(os.path.join(exp_folder, "vecnormalize.pkl"), env)
+        LOGGER.info(f"Loading running average from {os.path.join(exp_folder, 'vecnormalize.pkl')}")
+        return VecNormalize.load(os.path.join(exp_folder, 'vecnormalize.pkl'), env)
     else:
-        # Legacy:
-        return VecNormalize.load_running_average(exp_folder)
+        raise FileNotFoundError(f"vecnormalize.pkl not found in {exp_folder}")
 
 
 def parse_noise(hyperparams, n_actions, algo):
@@ -233,22 +236,41 @@ def parse_noise(hyperparams, n_actions, algo):
     return hyperparams
 
 
-def continue_learning(hyperparams, args, env, tensorboard_log, normalize):
-    LOGGER.debug("Loading pretrained agent")
+def continue_learning(hyperparams, args, env, tensorboard_log, callbacks, normalize, save_path, env_id, rank):
 
     # Policy should not be changed
     del hyperparams["policy"]
     hyperparams = del_key_from_hyperparams(hyperparams, "n_envs")
-
-    model = ALGOS[args.algo].load(args.trained_agent, env=env, tensorboard_log=tensorboard_log,
-                                  verbose=args.logging_mode.value, **hyperparams)
-
     exp_folder = os.path.dirname(args.trained_agent)
 
     # TODO: The following statements have no effect, probably the model definition should be moved after these lines
     if normalize:
-        LOGGER.info("Loading saved running average")
         env = create_vec_normalized_env(exp_folder, env)
+
+    LOGGER.info(f"Loading from {args.trained_agent}")
+    model = ALGOS[args.algo].load(args.trained_agent, env=env, tensorboard_log=tensorboard_log,
+                                  verbose=args.logging_mode.value, **hyperparams)
+
+    # Arguments to the learn function
+    kwargs = {}
+    if args.log_interval > -1:
+        kwargs = {"log_interval": args.log_interval}
+    if len(callbacks) > 0:
+        kwargs["callback"] = callbacks
+
+    try:
+        model.learn(args.n_timesteps, **kwargs)
+    except KeyboardInterrupt:
+        pass
+
+    # Only save worker of rank 0 when using mpi
+    if rank == 0:
+        LOGGER.info(f"Saving model to {save_path}")
+        model.save(os.path.join(save_path, str(env_id)))
+        if normalize:
+            # Important: save the running average, for testing the agent we need that normalization
+            LOGGER.info(f"Saving vectorized and normalized environment wrapper to {save_path}")
+            model.get_vec_normalize_env().save(os.path.join(save_path, "vecnormalize.pkl"))
 
 
 def optimize_parameters(hyperparams, args, save_path, create_env, sampling_setting_reward_configs,
@@ -353,7 +375,18 @@ def optimize_parameters(hyperparams, args, save_path, create_env, sampling_setti
 
 def train_from_scratch(hyperparams, args, env, tensorboard_log, callbacks, save_path, env_id, normalize, rank):
     hyperparams = del_key_from_hyperparams(hyperparams, "n_envs")
-    model = ALGOS[args.algo](env=env, tensorboard_log=tensorboard_log,
+    ### add gail model
+    if args.algo == 'gail':
+        expert_path = os.path.join(args.save_path, "../expert/R_G3_T3_36.npz")
+        dataset = ExpertDataset(expert_path, verbose=1)
+        tb_log_name = hyperparams['tb_log_name']
+        hyperparams = del_key_from_hyperparams(hyperparams, "mode")
+        hyperparams = del_key_from_hyperparams(hyperparams, "rule")
+        hyperparams = del_key_from_hyperparams(hyperparams, "tb_log_name")
+        model = ALGOS[args.algo](env=env, expert_dataset=dataset, tensorboard_log=tensorboard_log,
+                             seed=args.seed, verbose=1, **hyperparams)
+    else:
+        model = ALGOS[args.algo](env=env, tensorboard_log=tensorboard_log,
                              seed=args.seed, verbose=args.logging_mode.value, **hyperparams)
 
     # Arguments to the learn function
@@ -362,6 +395,9 @@ def train_from_scratch(hyperparams, args, env, tensorboard_log, callbacks, save_
         kwargs = {"log_interval": args.log_interval}
     if len(callbacks) > 0:
         kwargs["callback"] = callbacks
+    ### add gail model 
+    if args.algo == 'gail':
+        kwargs['tb_log_name'] = tb_log_name
 
     try:
         model.learn(args.n_timesteps, **kwargs)
@@ -552,7 +588,13 @@ def run_stable_baselines(args):
         # Account for the number of parallel environments
         args.save_freq = max(args.save_freq // args.n_envs, 1)
         callbacks.append(CheckpointCallback(save_freq=args.save_freq, save_path=save_path,
-                                            name_prefix="rl_model", verbose=1))
+                                            name_prefix="rl_model", verbose=args.logging_mode.value))
+        callbacks.append(SaveVecNormalizeCallback(
+            save_freq=args.save_freq,
+            save_path=save_path,
+            name_prefix="vecnormalize",
+            verbose=args.logging_mode.value,
+        ))
 
     def create_env(n_envs, eval_env=False, **kwargs):
         """
@@ -599,7 +641,7 @@ def run_stable_baselines(args):
             new_env.seed(args.seed)
             if env_wrapper is not None:
                 new_env = env_wrapper(new_env)
-        else:
+        elif algo != 'gail':
             if n_envs == 1:
                 new_env = DummyVecEnv([make_env(env_id,
                                                 0,
@@ -640,6 +682,22 @@ def run_stable_baselines(args):
             if isinstance(new_env, VecEnv):
                 new_env = _UnvecWrapper(new_env)
             new_env = HERGoalEnvWrapper(new_env)
+        ### add gail model
+        if args.algo == "gail":
+            env1 = gym.make("commonroad-v1",
+                            **env_configs)
+            print('env1.observation_space', env1.observation_space)        
+                     
+            env_kwargs["mode"] = hyperparams["mode"]
+            env_kwargs["rule"] = hyperparams["rule"]
+            env_kwargs["env"] = env1
+            new_env = DummyVecEnv([make_env(env_id,
+                                        0,
+                                        args.seed,
+                                        log_dir=log_dir,
+                                        logging_path=save_path,
+                                        env_kwargs=env_kwargs_test if eval_env else env_kwargs,
+                                        info_keywords=args.info_keywords)])
         return new_env
 
     # HINT: Three main options to be chosen from
@@ -679,7 +737,7 @@ def run_stable_baselines(args):
                 log_path=save_path,
                 best_model_save_path=save_path,
                 eval_freq=eval_freq,
-                n_eval_episodes=args.eval_episodes,
+                n_eval_timesteps=args.eval_timesteps,
                 callback_on_new_best=save_vec_normalize,
                 verbose=args.logging_mode.value,
             )
@@ -697,7 +755,7 @@ def run_stable_baselines(args):
 
         # Load a trained model and continue training
         if os.path.isfile(args.trained_agent):
-            continue_learning(hyperparams, args, env, tensorboard_log, normalize)
+            continue_learning(hyperparams, args, env, tensorboard_log, callbacks, normalize, save_path, env_id, rank)
         else:
             # Train an agent from scratch
             train_from_scratch(hyperparams, args, env, tensorboard_log, callbacks, save_path, env_id, normalize, rank)

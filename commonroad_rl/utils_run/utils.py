@@ -2,10 +2,13 @@ import argparse
 import glob
 import importlib
 import os
+import re
+import logging
+LOGGER = logging.getLogger(__name__)
 
 import gym
 import yaml
-
+import numpy as np
 try:
     import pybullet_envs
 except ImportError:
@@ -21,7 +24,7 @@ from stable_baselines.common.policies import register_policy
 from stable_baselines.sac.policies import FeedForwardPolicy as SACPolicy
 from stable_baselines.bench import Monitor
 from stable_baselines import logger
-from stable_baselines import PPO2, A2C, ACER, ACKTR, HER, SAC, TD3
+from stable_baselines import PPO2, A2C, ACER, ACKTR, HER, SAC, TD3, GAIL
 
 # DDPG and TRPO require MPI to be installed
 if mpi4py is None:
@@ -31,12 +34,12 @@ else:
 
 from stable_baselines.common.vec_env import (
     DummyVecEnv,
-    VecNormalize,
+    VecNormalize as SBVecNormalize,
     VecFrameStack,
     SubprocVecEnv,
 )
 from stable_baselines.common.cmd_util import make_atari_env
-from stable_baselines.common import set_global_seeds
+from stable_baselines.common import set_global_seeds, BaseRLModel
 
 from commonroad_rl.gym_commonroad.constants import PATH_PARAMS
 ALGOS = {
@@ -49,6 +52,7 @@ ALGOS = {
     "ppo2": PPO2,
     "trpo": TRPO,
     "td3": TD3,
+    "gail": GAIL,
 }
 # import DQN
 try:
@@ -80,6 +84,70 @@ class CustomSACPolicy(SACPolicy):
 register_policy("CustomSACPolicy", CustomSACPolicy)
 register_policy("CustomDQNPolicy", CustomDQNPolicy)
 register_policy("CustomMlpPolicy", CustomMlpPolicy)
+
+
+class CRVecNormalize(SBVecNormalize):
+    def __init__(self, vec_normalize: SBVecNormalize):
+        self.vec_normalize = vec_normalize
+        # SBVecNormalize.__init__(self, SBVecNormalize)
+
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(
+                "attempted to get missing private attribute '{}'".format(name)
+            )
+        return getattr(self.vec_normalize, name)
+
+    def reset(self, **kwargs):
+        """
+        Reset all environments
+        """
+        obs = self.venv.reset(**kwargs)
+        self.old_obs = obs
+        self.ret = np.zeros(self.num_envs)
+        if self.training:
+            self._update_reward(self.ret)
+        return self.normalize_obs(obs)
+
+
+def load_model_and_vecnormalize(model_path: str, algo: str, normalize: bool, env: gym.Env) -> BaseRLModel:
+    """
+    Load trained model and corresponding vecnormalize.pkl
+    :param model_path: Path to folder containing the trained model
+    :param algo: The used RL algorithm
+    :param normalize: If the env was normalized during training
+    :param env: The gym.Env used during training
+    :return: best_model.zip if exists else the last model and corresponding VecNormalize wrapped Env
+    """
+    # Load the trained agent
+    files = os.listdir(model_path)
+    if "best_model.zip" in files:
+        model_path = os.path.join(model_path, "best_model.zip")
+        if normalize:
+            vec_normalize_path = model_path.replace("best_model.zip", "vecnormalize.pkl")
+    else:
+        # No best_model.zip, find last model
+        files = sorted(glob.glob(os.path.join(model_path, "rl_model*.zip")))
+
+        def extract_number(f):
+            s = re.findall("\d+", f)
+            return int(s[-1]) if s else -1, f
+
+        model_path = max(files, key=extract_number)
+        vec_normalize_path = model_path.replace("rl_model", "vecnormalize").replace(".zip", ".pkl")
+
+    if os.path.exists(vec_normalize_path):
+        LOGGER.info(f"Loading saved running average from {vec_normalize_path}")
+        env = CRVecNormalize(SBVecNormalize.load(vec_normalize_path, env))
+    else:
+        raise FileNotFoundError(f"vecnormalize.pkl not found in {vec_normalize_path}")
+        
+    # During testing the vecnormalize should not update the moving average
+    env.training = False
+    LOGGER.info(f"Loading model from {model_path}")
+    model = ALGOS[algo].load(model_path)
+
+    return model, env
 
 
 def flatten_dict_observations(env):
@@ -214,6 +282,7 @@ def make_env(
         env.seed(seed + rank)
         log_file = os.path.join(log_dir, str(rank)) if log_dir is not None else None
         env = Monitor(env, log_file, info_keywords=info_keywords)
+
         return env
 
     return _init

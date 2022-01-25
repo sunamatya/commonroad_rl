@@ -42,13 +42,7 @@ class Termination:
         }
         termination_reason = None
 
-        if observation["is_goal_reached"][0]:  # Goal region is reached
-            termination_info["is_goal_reached"] = 1
-            if self.termination_configs["terminate_on_goal_reached"]:
-                done = True
-                termination_reason = "is_goal_reached"
-
-        elif observation["is_off_road"][0]:  # Ego vehicle is off-road
+        if observation["is_off_road"][0]:  # Ego vehicle is off-road
             termination_info["is_off_road"] = 1
             if self.termination_configs["terminate_on_off_road"]:
                 done = True
@@ -59,6 +53,12 @@ class Termination:
             if self.termination_configs["terminate_on_collision"]:
                 done = True
                 termination_reason = "is_collision"
+
+        elif observation["is_goal_reached"][0]:  # Goal region is reached
+            termination_info["is_goal_reached"] = 1
+            if self.termination_configs["terminate_on_goal_reached"]:
+                done = True
+                termination_reason = "is_goal_reached"
 
         elif observation["is_time_out"][0]:  # Max simulation time step is reached
             termination_info["is_time_out"] = 1

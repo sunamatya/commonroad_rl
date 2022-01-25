@@ -1,3 +1,13 @@
+commonroad-v1:
+  normalize: true
+  policy: 'MlpPolicy'
+  ent_coef: 0.0
+  n_steps: 32
+  vf_coef: 0.5
+  lr_schedule: 'linear'
+  gamma: 0.99
+  learning_rate: 0.002
+
 atari:
   policy: 'CnnPolicy'
   n_envs: 16

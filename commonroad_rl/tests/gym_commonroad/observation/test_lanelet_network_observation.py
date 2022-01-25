@@ -4,6 +4,7 @@ from commonroad.planning.goal import GoalRegion
 from commonroad.planning.planning_problem import PlanningProblem
 from commonroad.scenario.lanelet import Lanelet
 from commonroad.scenario.scenario import Scenario, ScenarioID
+from commonroad.geometry.shape import Rectangle
 from commonroad_dc.collision.collision_detection.pycrcc_collision_dispatch import create_collision_object
 from commonroad_route_planner.route_planner import RoutePlanner
 from shapely.geometry import LineString, Point
@@ -41,7 +42,8 @@ def prepare_for_test():
     # construct ego vehicle
     vehicle_type = VehicleType.BMW_320i
     vehicle_model = VehicleModel.KS
-    vehicle = ContinuousAction({"vehicle_type": vehicle_type, "vehicle_model": vehicle_model}, {"action_base": "acceleration"})
+    vehicle = ContinuousAction({"vehicle_type": vehicle_type, "vehicle_model": vehicle_model},
+                               {"action_base": "acceleration"})
 
     # Initial state of the vehicle
     dummy_state = {
@@ -49,7 +51,7 @@ def prepare_for_test():
         "velocity": 30.0,
         "yaw_rate": 0.0,
         "steering_angle": 0.0,
-        "time_step": 0.0,
+        "time_step": 0,
         "orientation": 0.0,
     }
 
@@ -150,7 +152,7 @@ def test_get_relative_future_goal_offsets(goal_region: GoalRegion, ego_state: St
                       center_vertices=np.array([[0.0, 0.0], [10.0, 0.0]]),
                       right_vertices=np.array([[0.0, -3.0], [10.0, -3.0]]))
 
-    scenario = Scenario(dt=0.1, benchmark_id="test", scenario_id="DEU_TEST-1_1_T-1")
+    scenario = Scenario(dt=0.1, scenario_id=ScenarioID("DEU_TEST-1_1_T-1"))
     scenario.lanelet_network.add_lanelet(lanelet)
 
     route_planner = RoutePlanner(
@@ -174,7 +176,7 @@ def test_get_relative_future_goal_offsets(goal_region: GoalRegion, ego_state: St
     ("strict_off_road_check", "check_circle_radius", "action", "expected_output"),
     [
         (True, 0, np.array([0.0, 0.0]), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-        (True, 0, np.array([0.05, 0.0]), [0, 0, 0, 0, 0, 1, 1, 1, 0, 0]),
+        (True, 0, np.array([0.05, 0.0]), [0, 0, 0, 0, 0, 1, 1, 1, 1, 0]),
         (False, 0.1, np.array([0.05, 0.0]), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
         (False, 0.5, np.array([0.05, 0.0]), [0, 0, 0, 0, 0, 0, 1, 0, 0, 0]),
         (False, 1.0, np.array([0.05, 0.0]), [0, 0, 0, 0, 0, 0, 1, 1, 0, 0]),
@@ -199,6 +201,44 @@ def test_check_off_road(strict_off_road_check, check_circle_radius, action, expe
         result[i] = lanelet_observation._check_is_off_road(vehicle_action.vehicle, road_edge)
 
     assert np.all(result[-10:] == expected_output)
+
+
+@functional
+@unit_test
+def test_is_off_road_end():
+    vehicle_action.reset(State(position=np.array([387.5, 5.]),
+                               orientation=0.,
+                               velocity=0.,
+                               time_step=0), dt=0.1)
+
+    # specify off-road check mode
+    lanelet_observation.strict_off_road_check = True
+
+    # should not be off road if open end
+    assert not lanelet_observation._check_is_off_road(vehicle_action.vehicle, road_edge)
+
+    from commonroad_rl.tools.pickle_scenario.preprocessing import generate_reset_config
+    reset_config = generate_reset_config(scenario, open_lane_ends=False)
+
+    assert lanelet_observation._check_is_off_road(vehicle_action.vehicle, reset_config)
+
+
+@module_test
+@functional
+def test_end_of_road_termination():
+    env = gym.make("commonroad-v1",
+                   meta_scenario_path=os.path.join(pickle_path, "meta_scenario"),
+                   train_reset_config_path=os.path.join(pickle_path, "problem"))
+    env.reset()
+    # manually reset ego vehicle to the end of the road
+    env.ego_action.reset(State(position=np.array([387.5, 5.]),
+                               orientation=0.,
+                               velocity=1.,
+                               time_step=0), dt=0.1)
+    action = np.array([0., 0.])
+    obs, reward, done, info = env.step(action)
+
+    assert info["is_time_out"] == 1
 
 
 @pytest.mark.parametrize(

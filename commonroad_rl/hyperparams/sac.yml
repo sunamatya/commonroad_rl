@@ -1,7 +1,6 @@
 # Tuned
-commonroad-v0:
+commonroad-v1:
   normalize: "{'norm_obs': True, 'norm_reward': False}"
-  n_timesteps: !!float 1e6
   policy: 'CustomSACPolicy'
   learning_rate: lin_3e-4
   buffer_size: 1000000

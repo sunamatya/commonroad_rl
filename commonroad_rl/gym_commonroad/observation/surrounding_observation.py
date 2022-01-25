@@ -3,7 +3,6 @@ from typing import Union, Dict, List, Tuple, Set, Optional
 
 import commonroad_dc.pycrcc as pycrcc
 import gym
-import matplotlib.pyplot as plt
 import numpy as np
 from commonroad.common.util import make_valid_orientation
 from commonroad.geometry.shape import Polygon, Rectangle
@@ -11,8 +10,8 @@ from commonroad.scenario.lanelet import Lanelet, LaneletType
 from commonroad.scenario.trajectory import Trajectory
 from commonroad.scenario.obstacle import State, Obstacle, SignalState, ObstacleRole, ObstacleType
 from commonroad.scenario.scenario import Scenario
-from commonroad.visualization.draw_dispatch_cr import draw_object
-from commonroad_dc.collision.visualization import draw_dispatch as crdc_draw_dispatch
+from commonroad.visualization.mp_renderer import MPRenderer, ZOrders
+from commonroad.visualization.util import LineDataUnits
 from commonroad.scenario.traffic_sign import TrafficSignIDGermany
 from commonroad_rl.tools.trajectory_classification import TrajectoryType, classify_trajectory
 from numpy import ndarray
@@ -76,6 +75,7 @@ class SurroundingObservation(Observation):
         self._detected_obstacle_states = None
         self._surrounding_beams = None
         self._detection_points = None
+        self.detected_obstacles = None
         self.lanelet_dict = None
         self.all_lanelets_set = None
         self.observation_dict = OrderedDict()
@@ -130,6 +130,11 @@ class SurroundingObservation(Observation):
         self._scenario = scenario
         self._current_time_step = time_step
         self._ego_state = ego_vehicle.state
+        if not self.fast_distance_calculation:
+            self._ego_shape = Rectangle(length=ego_vehicle.parameters.l,
+                                        width=ego_vehicle.parameters.w,
+                                        center=self._ego_state.position,
+                                        orientation=self._ego_state.orientation).shapely_object
         self._collision_checker = collision_checker
         self._local_ccosy = local_ccosy
         self.lanelet_dict, self.all_lanelets_set = SurroundingObservation.get_nearby_lanelet_id(connected_lanelet_dict,
@@ -153,36 +158,36 @@ class SurroundingObservation(Observation):
                                                        self._ego_state.position[0],
                                                        self._ego_state.position[1])
 
-            ego_vehicle_lat_position, self._detected_obstacle_states, _detected_obstacles = \
+            ego_vehicle_lat_position, self._detected_obstacle_states, self.detected_obstacles = \
                 self._get_surrounding_obstacles_lane_based(self._surrounding_area)
 
         elif self.observe_lidar_circle_surrounding:
             self._surrounding_area = pycrcc.Circle(self.lidar_sensor_radius, self._ego_state.position[0],
                                                    self._ego_state.position[1])
-            _detected_obstacles = self._get_surrounding_obstacles_lidar_circle()
+            self.detected_obstacles = self._get_surrounding_obstacles_lidar_circle()
             if self.reward_safe_distance_coef != 0:
                 self._add_leading_following_distance_lidar_lane()
             if self.observe_relative_priority:
-                self._add_relative_priority(_detected_obstacles, ego_lanelet, ego_vehicle)
+                self._add_relative_priority(self.detected_obstacles, ego_lanelet, ego_vehicle)
 
         if self.observe_lane_change:
             self._detect_lane_change(ego_lanelet_ids)
 
-        # if collision_checker is not None:
-        # is_collision = self._check_collision(collision_checker, ego_vehicle)
-        is_collision = self._check_collision(collision_checker, ego_vehicle)
-
         if self.observe_is_collision:
+            is_collision = self._check_collision(collision_checker, ego_vehicle)
             self.observation_dict["is_collision"] = np.array([is_collision])
+
         return self.observation_dict, ego_vehicle_lat_position
 
-    def draw(self, render_configs: Dict, terminated: bool = False):
+    def draw(self, render_configs: Dict, render: MPRenderer, terminated: bool = False):
         # Mark surrounding obstacles (Only if corresponding observations are available)
         # Lane-based surrounding rendering
         # surrounding areas
         if render_configs["render_surrounding_area"] and (
                 self.observe_lane_rect_surrounding or self.observe_lane_circ_surrounding):
-            crdc_draw_dispatch.draw_object(self._surrounding_area, draw_params={"collision": {"facecolor": "blue"}})
+            self._surrounding_area.draw(render, draw_params={"facecolor": "lightblue",
+                                                             "edgecolor": "lightblue", "opacity": 0.5})
+
         # detected obstacles
         if render_configs["render_surrounding_obstacles_lane_based"] and (
                 self.observe_lane_rect_surrounding or self.observe_lane_circ_surrounding):
@@ -190,7 +195,9 @@ class SurroundingObservation(Observation):
             # o_left_follow, o_same_follow, o_right_follow, o_left_lead, o_same_lead, o_right_lead
             for obs, color in zip(self._detected_obstacle_states, colors):
                 if obs is not None:
-                    plt.plot(obs.position[0], obs.position[1], color=color, marker="*", zorder=20)
+                    render.dynamic_artists.append(
+                        LineDataUnits([obs.position[0]], [obs.position[1]], color=color, marker="*",
+                                      zorder=ZOrders.OBSTACLES+1, label="surrounding_obstacles_lane_based"))
 
         # Lidar-based elliptical surrounding rendering
         if self.observe_lidar_circle_surrounding and render_configs["render_lidar_circle_surrounding_beams"]:
@@ -198,11 +205,13 @@ class SurroundingObservation(Observation):
                 center = beam_start + 0.5 * beam_length * approx_orientation_vector(beam_angle)
                 beam_angle = make_valid_orientation(beam_angle)
                 beam_draw_object = Rectangle(length=beam_length, width=0.1, center=center, orientation=beam_angle)
-                draw_object(beam_draw_object)
+                beam_draw_object.draw(render)
 
         if self.observe_lidar_circle_surrounding and render_configs["render_lidar_circle_surrounding_obstacles"]:
             for idx, detection_point in enumerate(self._detection_points):
-                plt.plot(detection_point[0], detection_point[1], color="b", marker="1", zorder=20)
+                render.dynamic_artists.append(
+                    LineDataUnits(detection_point[0], detection_point[1], color="b", marker="1",
+                                  zorder=ZOrders.INDICATOR_ADD, label="surrounding_obstacles_lidar_based"))
 
     def _get_surrounding_obstacles_lane_based(self, surrounding_area: Union[pycrcc.RectOBB, pycrcc.Circle]) \
             -> Tuple[np.array, List[State], List[Obstacle]]:
@@ -247,90 +256,94 @@ class SurroundingObservation(Observation):
         Adds relative priority to the observation dict. {-1, 0, 1} for {yield, same, priority} respectively
         :param obstacles: a list of detected obstacles
         """
-        if self.observe_lidar_circle_surrounding:
-            # Classify ego trajectory from the reference path (project position onto reference path)
-            if self._local_ccosy.cartesian_point_inside_projection_domain(
-                    self._ego_state.position[0], self._ego_state.position[1]):
-                ego_curv_coords = self._local_ccosy.convert_to_curvilinear_coords(self._ego_state.position[0],
-                                                                                  self._ego_state.position[1])
-                ego_proj_pos = self._local_ccosy.convert_to_cartesian_coords(ego_curv_coords[0], 0)
-                t_type = self.trajectory_type_from_path(
-                    self._local_ccosy.reference_path(), turn_threshold, pycrcc.Circle(scan_range, ego_proj_pos[0],
-                                                                                      ego_proj_pos[1]))
-            # TODO: possible improvement - find the nearest possible point in the domain or use the last state
-            #  in the domain as reference
-            # If the point is not in the projection domain, classify the entire reference path
-            else:
-                t_type = self.trajectory_type_from_path(self._local_ccosy.reference_path(), turn_threshold)
-            # Calculate ego priority according to its trajectory class and signs
-            ego_lanelet_priority = self._detect_lanelet_priority(ego_lanelet, t_type)
-            obstacle_rel_lanelet_priorities = []
-            # Iterate over the obstacles
-            for obs in obstacles:
-                if obs is None or obs.obstacle_type == ObstacleRole.STATIC:
-                    obstacle_rel_lanelet_priorities.append(1.0)
-                    continue
-                obs_lanelet_ids = self._scenario.lanelet_network.find_lanelet_by_position(
-                    [obs.state_at_time(self._current_time_step).position])
-                obs_occupied_lanelet_id = self._get_occupied_lanelet_id(
-                    self._scenario, obs_lanelet_ids[0], obs.state_at_time(self._current_time_step))
-                if obs_occupied_lanelet_id is None:
+        # Classify ego trajectory from the reference path (project position onto reference path)
+        if self._local_ccosy.cartesian_point_inside_projection_domain(
+                self._ego_state.position[0], self._ego_state.position[1]):
+            ego_curv_coords = self._local_ccosy.convert_to_curvilinear_coords(self._ego_state.position[0],
+                                                                              self._ego_state.position[1])
+            ego_proj_pos = self._local_ccosy.convert_to_cartesian_coords(ego_curv_coords[0], 0)
+            t_type = self.trajectory_type_from_path(
+                self._local_ccosy.reference_path(), turn_threshold, pycrcc.Circle(scan_range, ego_proj_pos[0],
+                                                                                  ego_proj_pos[1]))
+        # TODO: possible improvement - find the nearest possible point in the domain or use the last state
+        #  in the domain as reference
+        # If the point is not in the projection domain, classify the entire reference path
+        else:
+            t_type = self.trajectory_type_from_path(self._local_ccosy.reference_path(), turn_threshold)
+        # Calculate ego priority according to its trajectory class and signs
+        ego_lanelet_priority = self._detect_lanelet_priority(ego_lanelet, t_type)
+        obstacle_rel_lanelet_priorities = []
+        # Iterate over the obstacles
+        for obs in obstacles:
+            if obs is None or obs.obstacle_type == ObstacleRole.STATIC:
+                obstacle_rel_lanelet_priorities.append(1.0)
+                continue
+            obstacle_state = obs.state_at_time(self._current_time_step)
+            obs_occupied_lanelet_id = list(obs.prediction.shape_lanelet_assignment[self._current_time_step])
+            if len(obs_occupied_lanelet_id) > 1:
+                obs_occupied_lanelet_id = Navigator.sorted_lanelet_ids(
+                    obs_occupied_lanelet_id, obstacle_state.orientation, obstacle_state.position, self._scenario)[0]
+            elif len(obs_occupied_lanelet_id) == 1:
+                obs_occupied_lanelet_id = obs_occupied_lanelet_id[0]
+            elif obs_occupied_lanelet_id is None:
+                obstacle_rel_lanelet_priorities.append(0.0)
+                continue
+
+            obs_lanelet = self._scenario.lanelet_network.find_lanelet_by_id(obs_occupied_lanelet_id)
+
+            obstacle_turning_signal = obs.signal_state_at_time_step(self._current_time_step)
+
+            if obstacle_turning_signal is None:
+                obs_t_type = TrajectoryType.STRAIGHT
+            elif obstacle_turning_signal.indicator_left:
+                obs_t_type = TrajectoryType.LEFT
+            elif obstacle_turning_signal.indicator_right:
+                obs_t_type = TrajectoryType.RIGHT
+            # else:
+            #     obs_t_type = TrajectoryType.STRAIGHT
+
+            # Classify the obstacle priority based on its trajectory class and signs
+            obstacle_lanelet_priority = self._detect_lanelet_priority(obs_lanelet, obs_t_type)
+            intersection_dict = self._scenario.lanelet_network.map_inc_lanelets_to_intersections
+            # Check if ego and the obstacle are approaching the same intersection
+            # or if the obstacle is already in an intersection
+            if ego_lanelet.lanelet_id in intersection_dict \
+                    and ((obs_lanelet.lanelet_id in intersection_dict and
+                          intersection_dict[ego_lanelet.lanelet_id] == intersection_dict[obs_lanelet.lanelet_id])
+                         or obs_lanelet.lanelet_type == LaneletType.INTERSECTION):
+                # If an obstacle is in the middle of an intersection -> yield
+                if obs_lanelet.lanelet_type == LaneletType.INTERSECTION:
+                    obstacle_rel_lanelet_priorities.append(-1.0)
+                # Obstacle in the same lanelet as ego -> same priority
+                # TODO: include adjacent lanelets -> obstacles can be ignored as well
+                elif obs_lanelet.lanelet_id == ego_lanelet.lanelet_id:
                     obstacle_rel_lanelet_priorities.append(0.0)
-                    continue
-                obs_lanelet = self._scenario.lanelet_network.find_lanelet_by_id(obs_occupied_lanelet_id)
-
-                obstacle_turning_signal = obs.signal_state_at_time_step(self._current_time_step)
-                if obstacle_turning_signal is None:
-                    obs_t_type = TrajectoryType.STRAIGHT
-                elif obstacle_turning_signal.indicator_left:
-                    obs_t_type = TrajectoryType.LEFT
-                elif obstacle_turning_signal.indicator_right:
-                    obs_t_type = TrajectoryType.RIGHT
-                else:
-                    obs_t_type = TrajectoryType.STRAIGHT
-
-                # Classify the obstacle priority based on its trajectory class and signs
-                obstacle_lanelet_priority = self._detect_lanelet_priority(obs_lanelet, obs_t_type)
-                intersection_dict = self._scenario.lanelet_network.map_inc_lanelets_to_intersections
-                # Check if ego and the obstacle are approaching the same intersection
-                # or if the obstacle is already in an intersection
-                if ego_lanelet.lanelet_id in intersection_dict \
-                        and ((obs_lanelet.lanelet_id in intersection_dict and
-                              intersection_dict[ego_lanelet.lanelet_id] == intersection_dict[obs_lanelet.lanelet_id])
-                             or obs_lanelet.lanelet_type == LaneletType.INTERSECTION):
-                    # If an obstacle is in the middle of an intersection -> yield
-                    if obs_lanelet.lanelet_type == LaneletType.INTERSECTION:
+                # The signs match -> check right before left
+                elif ego_lanelet_priority in [4, 5, 6] and obstacle_lanelet_priority in [4, 5, 6] or \
+                        self._matching_signs(ego_lanelet, obs_lanelet):
+                    # Right before left rule applies, check by orientation
+                    obs_state = obs.state_at_time(self._current_time_step)
+                    ego_state = ego_vehicle.state
+                    ego_state_orientation = ego_state.orientation if hasattr(ego_state, "orientation") else \
+                        np.arctan2(ego_state.velocity_y, ego_state.velocity)
+                    rel_orientation = make_valid_orientation(obs_state.orientation - ego_state_orientation)
+                    if np.isclose(rel_orientation, np.pi / 2, atol=np.pi * 1 / 6):
                         obstacle_rel_lanelet_priorities.append(-1.0)
-                    # Obstacle in the same lanelet as ego -> same priority
-                    # TODO: include adjacent lanelets -> obstacles can be ignored as well
-                    elif obs_lanelet.lanelet_id == ego_lanelet.lanelet_id:
-                        obstacle_rel_lanelet_priorities.append(0.0)
-                    # The signs match -> check right before left
-                    elif ego_lanelet_priority in [4, 5, 6] and obstacle_lanelet_priority in [4, 5, 6] or \
-                            self._matching_signs(ego_lanelet, obs_lanelet):
-                        obstacle_rel_lanelet_priorities.append(-1.0)
-                        # Right before left rule applies, check by orientation
-                        obs_state = obs.state_at_time(self._current_time_step)
-                        ego_state = ego_vehicle.state
-                        ego_state_orientation = ego_state.orientation if hasattr(ego_state, "orientation") else \
-                            np.arctan2(ego_state.velocity_y, ego_state.velocity)
-                        rel_orientation = make_valid_orientation(obs_state.orientation - ego_state_orientation)
-                        if np.isclose(rel_orientation, np.pi / 2, atol=np.pi * 1 / 6):
-                            obstacle_rel_lanelet_priorities.append(-1.0)
-                            continue
-                        elif np.isclose(rel_orientation, 1.5 * np.pi, atol=np.pi * 1 / 6):
-                            obstacle_rel_lanelet_priorities.append(1.0)
-                            continue
-                    # Check sign + driving direction rules
-                    if obstacle_lanelet_priority < ego_lanelet_priority:
+                        continue
+                    elif np.isclose(rel_orientation, 1.5 * np.pi, atol=np.pi * 1 / 6):
                         obstacle_rel_lanelet_priorities.append(1.0)
-                    elif obstacle_lanelet_priority > ego_lanelet_priority:
-                        obstacle_rel_lanelet_priorities.append(-1.0)
-                    else:
-                        obstacle_rel_lanelet_priorities.append(0.0)
-                else:
+                        continue
+                    # obstacle_rel_lanelet_priorities.append(-1.0)
+                # Check sign + driving direction rules
+                if obstacle_lanelet_priority < ego_lanelet_priority:
                     obstacle_rel_lanelet_priorities.append(1.0)
-            self.observation_dict["rel_prio_lidar"] = np.array(obstacle_rel_lanelet_priorities)
+                elif obstacle_lanelet_priority > ego_lanelet_priority:
+                    obstacle_rel_lanelet_priorities.append(-1.0)
+                else:
+                    obstacle_rel_lanelet_priorities.append(0.0)
+            else:
+                obstacle_rel_lanelet_priorities.append(1.0)
+        self.observation_dict["rel_prio_lidar"] = np.array(obstacle_rel_lanelet_priorities)
 
     @staticmethod
     def trajectory_type_from_path(ref_path: ndarray, turn_threshold=0.02, traj_area=None) -> TrajectoryType:
@@ -433,6 +446,7 @@ class SurroundingObservation(Observation):
             self._get_vehicle_lights(observed_obstacles)
         self._surrounding_beams = surrounding_beams_ego_vehicle
         self._detection_points = detection_points
+
         return observed_obstacles
 
     @staticmethod
@@ -556,29 +570,50 @@ class SurroundingObservation(Observation):
 
         # iterate over all dynamic obstacles
         for o in dyn_obstacles:
-            center_lanelet_ids = list(o.prediction.center_lanelet_assignment.values())
-            if o.initial_state.time_step <= self._current_time_step <= o.prediction.trajectory.final_state.time_step:
-                obstacle_state = o.state_at_time(self._current_time_step)
-                obstacle_point = pycrcc.Point(obstacle_state.position[0], obstacle_state.position[1])
-                if surrounding_area.collide(obstacle_point):
-                    o_center_lanelet_ids = list(o.prediction.center_lanelet_assignment[self._current_time_step])
-                    o_shape_lanelet_ids = list(o.prediction.shape_lanelet_assignment[self._current_time_step])
-                    o_lanelet_id = self._get_occupied_lanelet_id(self._scenario, o_center_lanelet_ids, obstacle_state)
-                    if o_lanelet_id is None:
-                        # use shape lanelet assignment instead
-                        o_lanelet_id = self._get_occupied_lanelet_id(self._scenario, o_shape_lanelet_ids,
-                                                                     obstacle_state)
+            # TODO: initial lanelet_assignment missed?
+            if o.prediction is not None:
+                center_lanelet_ids = list(o.prediction.center_lanelet_assignment.values())
+                if o.initial_state.time_step <= self._current_time_step <= o.prediction.trajectory.final_state.time_step:
+                    obstacle_state = o.state_at_time(self._current_time_step)
+                    obstacle_point = pycrcc.Point(obstacle_state.position[0], obstacle_state.position[1])
+                    if surrounding_area.collide(obstacle_point):
+                        o_center_lanelet_ids = list(o.prediction.center_lanelet_assignment[self._current_time_step])
+                        o_shape_lanelet_ids = list(o.prediction.shape_lanelet_assignment[self._current_time_step])
+                        o_lanelet_id = self._get_occupied_lanelet_id(self._scenario, o_center_lanelet_ids, obstacle_state)
                         if o_lanelet_id is None:
-                            # neither center or shape locate inside a lanelet
-                            # TODO: skip or take last available time step ??
-                            non_empty_id_sets = [id_set for id_set in center_lanelet_ids if id_set]
-                            if len(non_empty_id_sets) == 0:
-                                continue
-                            o_lanelet_id = self._get_occupied_lanelet_id(self._scenario, list(non_empty_id_sets[-1]),
+                            # use shape lanelet assignment instead
+                            o_lanelet_id = self._get_occupied_lanelet_id(self._scenario, o_shape_lanelet_ids,
                                                                          obstacle_state)
-                    lanelet_ids.append(o_lanelet_id)
-                    obstacle_states.append(obstacle_state)
-                    obstacles.append(o)
+                            if o_lanelet_id is None:
+                                # neither center or shape locate inside a lanelet
+                                # TODO: skip or take last available time step ??
+                                non_empty_id_sets = [id_set for id_set in center_lanelet_ids if id_set]
+                                if len(non_empty_id_sets) == 0:
+                                    continue
+                                o_lanelet_id = self._get_occupied_lanelet_id(self._scenario, list(non_empty_id_sets[-1]),
+                                                                             obstacle_state)
+                        lanelet_ids.append(o_lanelet_id)
+                        obstacle_states.append(obstacle_state)
+                        obstacles.append(o)
+            else: # obstacle only has initial state (interactive scenarios)
+                if o.initial_state.time_step == self._current_time_step:
+                    obstacle_state = o.initial_state
+                    obstacle_point = pycrcc.Point(obstacle_state.position[0], obstacle_state.position[1])
+                    if surrounding_area.collide(obstacle_point):
+                        o_center_lanelet_ids = list(o.initial_center_lanelet_ids)
+                        o_shape_lanelet_ids = list(o.initial_shape_lanelet_ids)
+                        # sort lanelet ids by orientation and relevance
+                        o_lanelet_id = self._get_occupied_lanelet_id(self._scenario, o_center_lanelet_ids, obstacle_state)
+                        if o_lanelet_id is None:
+                            # use shape lanelet assignment instead
+                            o_lanelet_id = self._get_occupied_lanelet_id(self._scenario, o_shape_lanelet_ids,
+                                                                         obstacle_state)
+                            if o_lanelet_id is None:
+                                # neither center or shape locate inside a lanelet
+                                continue
+                        lanelet_ids.append(o_lanelet_id)
+                        obstacle_states.append(obstacle_state)
+                        obstacles.append(o)
 
         # iterate over all static obstacles
         for o in static_obstacles:
@@ -838,14 +873,12 @@ Im        Sets the turning-lights in observation_dict for all observed obstacles
 
         distance_sign = np.sign(ego_curvi_long_position - o_curvi_long_position)
 
-        dist_abs = self.max_obs_dist
         if self.fast_distance_calculation:
             dist_abs = np.abs(ego_curvi_long_position - o_curvi_long_position)
 
         else:
             o_shape = obstacle.occupancy_at_time(self._current_time_step).shape.shapely_object
-            (ego_x, ego_y) = self._ego_state.position
-            dist_abs = Point(ego_x, ego_y).distance(o_shape)
+            dist_abs = self._ego_shape.distance(o_shape)
 
         return dist_abs, distance_sign
 

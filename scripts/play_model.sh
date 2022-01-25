@@ -18,7 +18,7 @@ MODEL_PATH=${PWD}/log/$REWARD/ppo2/commonroad-v1_$MODEL_NUM
 
 echo "$TEST_PATH"
 
-python -m commonroad_rl.tools.pickle_scenario.copy_files -i "${TEST_PATH}" -o "${TEST_PATH}" -n $NUM_CPUS -f *.pickle
+python -m commonroad_rl.tools.pickle_scenario.copy_files -i "${TEST_PATH}" -o "${TEST_PATH}" -n $NUM_CPUS -f "*.pickle"
 
 # Play
 mpirun -np ${NUM_CPUS} python -m commonroad_rl.evaluate_model --algo ppo2 \

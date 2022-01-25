@@ -2,12 +2,13 @@
 Module for scenario related helper methods for the CommonRoad Gym environment
 """
 import numpy as np
-from typing import Tuple, Union, List
+from typing import Tuple, Union, List, Set
 from commonroad.common.solution import VehicleModel, VehicleType
+from commonroad.prediction.prediction import TrajectoryPrediction
 from commonroad.scenario.lanelet import Lanelet
-from commonroad.scenario.obstacle import DynamicObstacle
+from commonroad.scenario.obstacle import DynamicObstacle, StaticObstacle
 from commonroad.scenario.trajectory import State
-from commonroad.scenario.scenario import ScenarioID
+from commonroad.scenario.scenario import ScenarioID, Scenario
 from commonroad_dc.feasibility.feasibility_checker import trajectory_feasibility
 from commonroad_dc.feasibility.vehicle_dynamics import VehicleDynamics, VehicleParameters
 from shapely.geometry import LineString
@@ -16,10 +17,15 @@ from shapely.geometry import LineString
 def parse_map_name(scenario_id: ScenarioID) -> str:
     return f"{scenario_id.map_name}-{str(scenario_id.map_id)}"
 
+
 def make_valid_orientation(angle: float) -> float:
     # TODO: update this function in commonroad.common.util
     TWO_PI = 2.0 * np.pi
-    return angle % TWO_PI
+    angle = angle % TWO_PI
+    if np.pi <= angle <= TWO_PI:
+        angle = angle - TWO_PI
+    assert -np.pi <= angle <= np.pi
+    return angle
 
 
 def get_road_edge(scenario) -> Tuple[dict, dict, dict, dict]:

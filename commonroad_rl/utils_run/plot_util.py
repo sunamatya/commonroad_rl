@@ -231,7 +231,7 @@ def load_results(root_dir_or_dirs, enable_progress=True, enable_monitor=True, ve
     return allresults
 
 
-COLORS = ["cornflowerblue", "slategray", "darkorange", "tab:red",  'royalblue', 'lightcoral', "tab:pink", "tab:red",
+COLORS = ["tab:red", "cornflowerblue", "slategray", "darkorange", 'royalblue', 'lightcoral', "tab:pink", "tab:red",
           'blue', 'green', 'red', 'cyan', 'magenta', 'yellow', 'black', 'purple', 'pink', 'brown', 'orange', 'teal',
           'lightblue', 'lime', 'lavender', 'turquoise', 'darkgreen', 'tan', 'salmon', 'gold', 'darkred', 'darkblue']  #
 
@@ -251,10 +251,11 @@ def default_split_fn(r):
         return match.group(0)
 
 
-def plot_results(allresults, f, axarr, *, xy_fn=default_xy_fn, split_fn=default_split_fn, group_fn=default_split_fn,
+def plot_results(
+        allresults, f, axarr, *, xy_fn=default_xy_fn, split_fn=default_split_fn, group_fn=default_split_fn,
         average_group=False, shaded_std=True, shaded_err=True, figsize=None, legend_outside=False, resample=0,
         smooth_step=1.0, nrows=1, ncols=1, idx_row=0, idx_col=0, xlabel=None, ylabel=None, label=None, labelpad=None,
-        legend=True, plot_line=False):
+        legend=True, plot_line=False, set_y_lim=False):
     '''
     Plot multiple Results objects
 
@@ -341,12 +342,18 @@ def plot_results(allresults, f, axarr, *, xy_fn=default_xy_fn, split_fn=default_
             x, y = xy_fn(result)
             if x is None: x = np.arange(len(y))
             x, y = map(np.asarray, (x, y))
+
             if average_group:
                 gresults[group].append((x, y))
             else:
                 color = COLORS[groups.index(group) % len(COLORS)]
                 if resample:
-                    # x, y, counts = symmetric_ema(x, y, x[0], x[-1], resample, decay_steps=smooth_step)
+                    # if len(x) < 10000:
+                    #     smooth_window = 100
+                    # elif len(x) < int(1e5):
+                    #     smooth_window = 1000
+                    # else:
+                    #     smooth_window = 10000
                     smooth_window = 100
                     y = smooth(y, radius=smooth_window)
                     ymean, ystd, ystderr = [], [], []
@@ -362,11 +369,12 @@ def plot_results(allresults, f, axarr, *, xy_fn=default_xy_fn, split_fn=default_
                     y = ymean
                     x = xs
 
+                    # if os.path.basename(result.dirname) == "safe agent":
+                    #     x = np.concatenate((np.array([0.09548599999999999]), x))
+                    #     y = np.concatenate((np.array([y[0]]), y))
                     # show shaded std
                     if shaded_std:
-                        # ax.plot(xs, ymean-ystd, color=color, alpha=.2)
-                        # ax.plot(xs, ymean+ystd, color=color, alpha=.2)
-                        ax.fill_between(xs, ymean - ystd, ymean + ystd, color=color, alpha=.2, rasterized=True)
+                        ax.fill_between(x, ymean - ystd, ymean + ystd, color=color, alpha=.2, rasterized=True)
                 group = group.replace("_", " ")
                 if label is not None:
                     l, = ax.plot(x, y, color=color, label=label)
@@ -409,7 +417,12 @@ def plot_results(allresults, f, axarr, *, xy_fn=default_xy_fn, split_fn=default_
                 if shaded_std:
                     ax.fill_between(usex, ymean - ystd, ymean + ystd, color=color, alpha=.2)
 
-        ax.set_xlim([np.min(x) - 1, np.max(x)])
+        # ax.set_xlim([np.min(x) - 1, np.max(x)])
+        ax.set_xlim([np.min(x)-0.005, np.max(x)])
+        print(np.min(x)-0.005)
+        if set_y_lim:
+            ax.set_ylim([-0.05, 1.05])
+
         # locs = [int(xtick) for xtick in list(ax.get_xticks())] + [int(np.max(x))]
         locs = list(ax.get_xticks()) + [1000]
         locator = matplotlib.ticker.FixedLocator(locs)
@@ -427,7 +440,7 @@ def plot_results(allresults, f, axarr, *, xy_fn=default_xy_fn, split_fn=default_
                 #                      bbox_transform=fig.transFigure, fancybox=False, edgecolor="k")
                 # ax.legend(loc=8, bbox_to_anchor=bb, ncol=2, mode="expand", borderaxespad=0,
                 # bbox_transform=f.transFigure, fancybox=False, edgecolor="k")
-                ax.legend(ncol=1, #len(groups),
+                ax.legend(ncol=len(groups),
                           # g2l.values(),
                           # ['%s (%i)'%(g, g2c[g]) for g in g2l] if average_group else g2l.keys(),
                           loc=8 if legend_outside else None, bbox_to_anchor=bb if legend_outside else None,

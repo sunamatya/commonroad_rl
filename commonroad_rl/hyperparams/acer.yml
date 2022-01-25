@@ -1,3 +1,8 @@
+commonroad-v1:
+  normalize: true
+  policy: 'MlpPolicy'
+  ent_coef: 0.0
+
 atari:
   policy: 'CnnPolicy'
   n_envs: 16

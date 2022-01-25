@@ -1,0 +1,6 @@
+[submodule "external/commonroad-drivability-checker"]
+	path = external/commonroad-drivability-checker
+	url = https://gitlab.lrz.de/tum-cps/commonroad-drivability-checker.git
+[submodule "external/commonroad-interactive-scenarios"]
+	path = external/commonroad-interactive-scenarios
+	url = https://gitlab.lrz.de/tum-cps/commonroad-interactive-scenarios.git

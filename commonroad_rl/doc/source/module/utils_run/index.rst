@@ -66,13 +66,20 @@ Observation Configs Opt
    :members:
    :member-order: bysource
 
-Plot Util
-==========
-.. automodule:: commonroad_rl.utils_run.plot_util
+Plot
+====
+.. automodule:: commonroad_rl.utils_run.plot
    :members:
    :undoc-members:
    :member-order: bysource
 
+
+Record Video
+============
+.. automodule:: commonroad_rl.utils_run.record_video
+   :members:
+   :undoc-members:
+   :member-order: bysource
 
 Reward Configs Opt
 ==================

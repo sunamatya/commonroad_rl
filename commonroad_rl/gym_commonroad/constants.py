@@ -43,8 +43,8 @@ PATH_PARAMS = {
     "meta_scenario": ROOT_STR + "/pickles/meta_scenario",
     "train_reset_config": ROOT_STR + "/pickles/problem_train",
     "test_reset_config": ROOT_STR + "/pickles/problem_test",
-    "backup_reset_config": ROOT_STR + "/pickles/problem_backup",
     "log": ROOT_STR + "/log",
     "commonroad_solution": ROOT_STR + "/cr_solution",
-    "configs": {"commonroad-v1": ROOT_STR + "/commonroad_rl/gym_commonroad/configs.yaml"}
+    "configs": {"commonroad-v1": ROOT_STR + "/commonroad_rl/gym_commonroad/configs.yaml",
+                "cr_monitor-v0": ROOT_STR + "/commonroad_rl/gym_commonroad/configs.yaml"}
 }

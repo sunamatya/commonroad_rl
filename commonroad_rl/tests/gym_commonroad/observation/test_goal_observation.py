@@ -4,7 +4,7 @@ from commonroad.geometry.shape import Rectangle, Polygon, Circle, ShapeGroup
 from commonroad.planning.goal import GoalRegion
 from commonroad.planning.planning_problem import PlanningProblem
 from commonroad.scenario.lanelet import Lanelet
-from commonroad.scenario.scenario import Scenario
+from commonroad.scenario.scenario import Scenario, ScenarioID
 from commonroad.scenario.trajectory import State
 from commonroad_route_planner.route_planner import RoutePlanner
 
@@ -150,23 +150,16 @@ def test_get_long_lat_distance_advance_to_goal(prev_advances, lat_long_distance,
     goal_obs.observation_history_dict['distance_goal_long'] = prev_advances[0]
     goal_obs.observation_history_dict['distance_goal_lat'] = prev_advances[1]
 
-    advance = goal_obs._get_long_lat_distance_advance_to_goal(ego_state, *lat_long_distance)
+    advance = goal_obs._get_long_lat_distance_advance_to_goal(*lat_long_distance)
 
     assert np.isclose(advance[0], expected_output[0])
     assert np.isclose(advance[1], expected_output[1])
-
-    ego_state.time_step = 0
-
-    advance = goal_obs._get_long_lat_distance_advance_to_goal(ego_state, *lat_long_distance)
-    assert np.isclose(advance[0], 0)
-    assert np.isclose(advance[1], 0)
 
     ego_state.time_step = 1
     goal_obs.observe_distance_goal_long = False
     goal_obs.observe_distance_goal_lat = False
 
-
-    advance = goal_obs._get_long_lat_distance_advance_to_goal(ego_state, *lat_long_distance)
+    advance = goal_obs._get_long_lat_distance_advance_to_goal(*lat_long_distance)
     assert np.isclose(advance[0], 0)
     assert np.isclose(advance[1], 0)
 
@@ -369,13 +362,13 @@ def test_convert_shape_group_to_center(shape_group: ShapeGroup, actual_center: n
                     "slip_angle": 0.0,
                     "orientation": 3 * np.pi / 2,
                     "position": np.array([0.0, 0.0]),
-                    "velocity": 0
+                    "velocity": 0.
                 }),
                 GoalRegion([State(time_step=Interval(1, 1),
                                   position=Rectangle(length=2.0, width=2.0, center=np.array([0.0, 0.0])),
                                   orientation=AngleInterval(-np.pi / 2, np.pi / 2),
                                   velocity=Interval(0., 0.))]),
-                False
+                True
         )
     ]
 )
@@ -383,8 +376,6 @@ def test_convert_shape_group_to_center(shape_group: ShapeGroup, actual_center: n
 @unit_test
 def test_check_goal_reached(ego_state: State, goal_region: GoalRegion, is_reached: bool):
     """unittest for the GoalObservation._check_goal_reached method"""
-    configs = {"goal_configs": {}}
-
     assert GoalObservation._check_goal_reached(goal_region, ego_state) == is_reached
 
 
@@ -476,7 +467,7 @@ def test_get_long_lat_distance_to_goal(ego_position, expected_output):
                       center_vertices=np.array([[0.0, 0.0], [10.0, 0.0]]),
                       right_vertices=np.array([[0.0, -3.0], [10.0, -3.0]]))
 
-    scenario = Scenario(dt=0.1, benchmark_id="test", scenario_id="DEU_TEST-1_1_T-1")
+    scenario = Scenario(dt=0.1, scenario_id=ScenarioID("DEU_TEST-1_1_T-1"))
     scenario.lanelet_network.add_lanelet(lanelet)
 
     route_planner = RoutePlanner(

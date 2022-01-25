@@ -42,7 +42,7 @@ def is_initial_collision(planning_problem_set, env_reset):
     return ego_collision_object.collide(boundary_collision_object)
 
 
-def process_single_file(rank: int, fns: List[str], duplicate: bool, output_dir: str):
+def process_single_file(rank: int, fns: List[str], duplicate: bool, output_dir: str, open_lane_ends: bool):
 
     meta_scenario_reset_dict = dict()
     processed_location_list = []
@@ -54,7 +54,7 @@ def process_single_file(rank: int, fns: List[str], duplicate: bool, output_dir: 
         map_name_id = parse_map_name(scenario.scenario_id)
         if map_name_id not in processed_location_list:
             processed_location_list.append(map_name_id)
-            env_reset = generate_reset_config(scenario)
+            env_reset = generate_reset_config(scenario, open_lane_ends)
             if is_initial_collision(planning_problem_set, env_reset):
                 continue
             meta_scenario_reset_dict[map_name_id] = env_reset
@@ -72,7 +72,8 @@ def process_single_file(rank: int, fns: List[str], duplicate: bool, output_dir: 
         pickle.dump(meta_scenario_reset_dict, f)
 
 
-def pickle_xml_scenarios(input_dir: str, output_dir: str, duplicate: bool = False, num_processes: int = 1):
+def pickle_xml_scenarios(input_dir: str, output_dir: str, duplicate: bool = False, num_processes: int = 1,
+                         open_lane_ends: bool = True):
     # makedir
     os.makedirs(output_dir, exist_ok=True)
 
@@ -97,13 +98,13 @@ def pickle_xml_scenarios(input_dir: str, output_dir: str, duplicate: bool = Fals
                         i,
                         fns[i * num_scenarios_per_process : (i + 1) * num_scenarios_per_process],
                         duplicate,
-                        output_dir
+                        output_dir, open_lane_ends
                     )
                     for i in range(num_processes)
                 ]
             )
     else:
-        process_single_file(0, fns, duplicate, output_dir)
+        process_single_file(0, fns, duplicate, output_dir, open_lane_ends)
     meta_scenario_reset_dict = {}
     for i in range(num_processes):
         with open(os.path.join(output_dir, f"{meta_scenario_path}_{i}", "meta_scenario_reset_dict.pickle"), "rb") as f:
@@ -125,5 +126,6 @@ if __name__ == "__main__":
         args.input_dir,
         args.output_dir,
         duplicate=args.duplicate,
-        num_processes=args.num_processes
+        num_processes=args.num_processes,
+        open_lane_ends=True
     )

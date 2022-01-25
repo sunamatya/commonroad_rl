@@ -10,7 +10,6 @@ __maintainer__ = "Xiao Wang"
 __email__ = "xiao.wang@tum.de"
 __status__ = "Released"
 
-
 import argparse
 import random
 from typing import List
@@ -20,8 +19,7 @@ import commonroad_dc.pycrccosy as pycrccosy
 # import pycrcc
 import imageio
 # import commonroad_ccosy.visualization.draw_dispatch
-import matplotlib
-import matplotlib.pyplot as plt
+
 import numpy as np
 
 from commonroad.planning.planning_problem import PlanningProblem
@@ -29,7 +27,7 @@ from commonroad.scenario.lanelet import Lanelet
 from commonroad.scenario.scenario import Scenario
 from commonroad.scenario.trajectory import State
 from commonroad.visualization.draw_dispatch_cr import draw_object
-from commonroad_dc.geometry.util  import resample_polyline
+from commonroad_dc.geometry.util import resample_polyline
 from commonroad_dc.collision.visualization import draw_dispatch as crdc_draw_dispatch
 from matplotlib import gridspec
 
@@ -37,16 +35,18 @@ from commonroad_rl.gym_commonroad.commonroad_env import CommonroadEnv, restore_s
 from commonroad_rl.gym_commonroad.observation.goal_observation import GoalObservation
 from commonroad_rl.gym_commonroad.action.vehicle import Vehicle
 
+import matplotlib
+# try:
+#     matplotlib.use("TkAgg")
+# except:
+#     matplotlib.use("AGG")
+import matplotlib.pyplot as plt
 
-try:
-    matplotlib.use("TkAgg")
-except:
-    matplotlib.use("AGG")
-    
 VEHICLE_PARAMS = {
-        "vehicle_type": 2,  # VehicleType.BMW_320i
-        "vehicle_model": 0,
-    }
+    "vehicle_type": 2,  # VehicleType.BMW_320i
+    "vehicle_model": 0,
+}
+
 
 def argsparser():
     global args
@@ -82,10 +82,10 @@ def get_lanelet_orientation_at_state(lanelet: Lanelet, state: State):
 
 
 def draw_ccosy(
-    scenario: Scenario,
-    planning_problem: PlanningProblem,
-    ccosy_list: List[pycrccosy.CurvilinearCoordinateSystem],
-    ego_state: State = None,
+        scenario: Scenario,
+        planning_problem: PlanningProblem,
+        ccosy_list: List[pycrccosy.CurvilinearCoordinateSystem],
+        ego_state: State = None,
 ):
     """
     Draws all ccosy to the current plot

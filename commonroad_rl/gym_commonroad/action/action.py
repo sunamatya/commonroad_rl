@@ -1,12 +1,13 @@
 """
 Module containing the action base class
 """
+import gym
+from typing import Union
 from commonroad_dc.pycrccosy import CurvilinearCoordinateSystem
-
 from commonroad_rl.gym_commonroad.action.vehicle import *
 
 
-def _rotate_to_curvi(vector: np.ndarray, local_ccosy: CurvilinearCoordinateSystem, pos: np.ndarray)\
+def _rotate_to_curvi(vector: np.ndarray, local_ccosy: CurvilinearCoordinateSystem, pos: np.ndarray) \
         -> np.ndarray:
     """
     Function to rotate a vector in the curvilinear system to its counterpart in the normal coordinate system
@@ -55,10 +56,18 @@ class DiscreteAction(Action):
         action is converted to a low-level trajectory by a specified planner.
     """
 
-    def __init__(self, params_dict: dict):
+    def __init__(self, vehicle_params_dict: dict, long_steps: int, lat_steps: int):
         """ Initialize empty object """
         super().__init__()
-        self.vehicle = DiscreteVehicle(params_dict)
+
+        assert VehicleModel(vehicle_params_dict["vehicle_model"]) == VehicleModel.PM, \
+            'ERROR in ACTION INITIALIZATION: DiscreteAction only supports the PM vehicle_type no'
+
+        assert long_steps % 2 != 0 and lat_steps % 2 != 0, \
+            'ERROR in ACTION INITIALIZATION: The discrete steps for longitudinal and lateral action ' \
+            'have to be odd numbers, so constant velocity without turning is an possible action'
+
+        self.vehicle = ContinuousVehicle(vehicle_params_dict)
         self.local_ccosy = None
 
     def reset(self, initial_state: State, dt: float) -> None:
@@ -77,15 +86,21 @@ class DiscreteAction(Action):
         :param local_ccosy: Current curvilinear coordinate system
         """
         self.local_ccosy = local_ccosy
-        self.vehicle.current_time_step += 1
-        state = self._get_new_state(action)
+        state = self.get_new_state(action)
         self.vehicle.set_current_state(state)
-        self.vehicle.update_collision_object()
 
     @abstractmethod
-    def _get_new_state(self, action: Union[np.ndarray, int]) -> State:
+    def get_new_state(self, action: Union[np.ndarray, int]) -> State:
         """function which return new states given the action and current state"""
         pass
+
+    def _propagate(self, control_input: np.array):
+        # Rotate the action according to the curvilinear coordinate system
+        if self.local_ccosy is not None:
+            control_input = _rotate_to_curvi(control_input, self.local_ccosy, self.vehicle.state.position)
+
+        # get the next state from the PM model
+        return self.vehicle.get_new_state(control_input, "acceleration")
 
 
 class DiscretePMJerkAction(DiscreteAction):
@@ -94,36 +109,28 @@ class DiscretePMJerkAction(DiscreteAction):
         Discrete / High-level action class with point mass model and jerk control
     """
 
-    def __init__(self, params_dict: dict, long_steps: int, lat_steps: int):
+    def __init__(self, vehicle_params_dict: dict, long_steps: int, lat_steps: int):
         """
         Initialize object
-        :param params_dict: vehicle parameter dictionary
+        :param vehicle_params_dict: vehicle parameter dictionary
         :param long_steps: number of discrete longitudinal jerk steps
         :param lat_steps: number of discrete lateral jerk steps
         """
-        super().__init__(params_dict)
-        if VehicleModel(params_dict["vehicle_model"]) != VehicleModel.PM:
-            raise ValueError('ERROR in ACTION INITIALIZATION: '
-                             'DiscretePMAction can only be used with the PM vehicle_type')
-        self.vehicle = ContinuousVehicle(params_dict)
-        if long_steps % 2 == 0 or lat_steps % 2 == 0:
-            raise ValueError('ERROR in ACTION INITIALIZATION: '
-                             'The discrete steps for longitudinal and lateral jerk '
-                             'have to be odd numbers, so constant velocity without turning is an possible action')
+        super().__init__(vehicle_params_dict, long_steps, lat_steps)
+
         self.j_max = 10  # set the maximum jerk
         self.long_step_size = (self.j_max * 2) / (long_steps - 1)
+        self.lat_step_size = (self.j_max * 2) / (lat_steps - 1)
         self.action_mapping_long = {}
+        self.action_mapping_lat = {}
+
         for idx in range(long_steps):
             self.action_mapping_long[idx] = (self.j_max - (idx * self.long_step_size))
-        self.lat_step_size = (self.j_max * 2) / (lat_steps - 1)
-        self.action_mapping_lat = {}
+
         for idx in range(lat_steps):
             self.action_mapping_lat[idx] = (self.j_max - (idx * self.lat_step_size))
 
-        a_max = self.vehicle.parameters.longitudinal.a_max
-        self._rescale_factor = np.array([a_max, a_max])
-
-    def _get_new_state(self, action: Union[np.ndarray, int]) -> State:
+    def get_new_state(self, action: Union[np.ndarray, int]) -> State:
         """
         calculation of next state depending on the discrete action
         :param action: discrete action
@@ -134,34 +141,18 @@ class DiscretePMJerkAction(DiscreteAction):
         a_long = self.action_mapping_long[action[0]] * self.vehicle.dt + self.vehicle.state.acceleration
         if self.vehicle.state.acceleration != 0 and np.sign(a_long) != np.sign(self.vehicle.state.acceleration) and \
                 (np.abs(a_long) % (self.long_step_size * self.vehicle.dt)) != 0:
-            if a_long > 0:
-                a_long = self.action_mapping_long[action[0]] * self.vehicle.dt + self.vehicle.state.acceleration - \
-                         (np.abs(a_long) % (self.long_step_size * self.vehicle.dt))
-            else:
-                a_long = self.action_mapping_long[action[0]] * self.vehicle.dt + self.vehicle.state.acceleration + \
-                         (np.abs(a_long) % (self.long_step_size * self.vehicle.dt))
+            a_long = self.action_mapping_long[action[0]] * self.vehicle.dt + self.vehicle.state.acceleration - \
+                     np.sign(a_long) * (np.abs(a_long) % (self.long_step_size * self.vehicle.dt))
 
         a_lat = self.action_mapping_lat[action[1]] * self.vehicle.dt + self.vehicle.state.acceleration_y
         if self.vehicle.state.acceleration_y != 0 and np.sign(a_lat) != np.sign(self.vehicle.state.acceleration_y) and \
                 (np.abs(a_lat) % (self.lat_step_size * self.vehicle.dt)) != 0:
-            if a_lat > 0:
-                a_lat = self.action_mapping_long[action[1]] * self.vehicle.dt + self.vehicle.state.acceleration_y - (
-                        np.abs(a_lat) % (self.lat_step_size * self.vehicle.dt))
-            else:
-                a_lat = self.action_mapping_long[action[1]] * self.vehicle.dt + self.vehicle.state.acceleration_y + (
-                        np.abs(a_lat) % (self.lat_step_size * self.vehicle.dt))
-        # add rotation if necessary
+            a_lat = self.action_mapping_long[action[1]] * self.vehicle.dt + self.vehicle.state.acceleration_y - \
+                    np.sign(a_lat) * (np.abs(a_lat) % (self.lat_step_size * self.vehicle.dt))
+
         control_input = np.array([a_long, a_lat])
-        if np.linalg.norm(control_input) > self.vehicle.parameters.longitudinal.a_max:
-            control_input = (control_input / np.linalg.norm(control_input)) * self._rescale_factor
 
-        # Rotate the action according to the curvilinear coordinate system
-        if self.local_ccosy is not None:
-            control_input = _rotate_to_curvi(control_input, self.local_ccosy, self.vehicle.state.position)
-
-        # get the next state from the PM model
-        next_state = self.vehicle.get_new_state(control_input, "acceleration")
-        return next_state
+        return self._propagate(control_input)
 
 
 class DiscretePMAction(DiscreteAction):
@@ -170,50 +161,50 @@ class DiscretePMAction(DiscreteAction):
         Discrete / High-level action class with point mass model
     """
 
-    def __init__(self, params_dict: dict, long_steps: int, lat_steps: int):
+    def __init__(self, vehicle_params_dict: dict, long_steps: int, lat_steps: int):
         """
         Initialize object
-        :param params_dict: vehicle parameter dictionary
+        :param vehicle_params_dict: vehicle parameter dictionary
         :param long_steps: number of discrete acceleration steps
         :param lat_steps: number of discrete turning steps
         """
-        super().__init__(params_dict)
-        if VehicleModel(params_dict["vehicle_model"]) != VehicleModel.PM:
-            print('ERROR in ACTION INITIALIZATION: DiscretePMAction can only be used with the PM vehicle_type')
-            raise ValueError
-        self.vehicle = ContinuousVehicle(params_dict)
-        if lat_steps % 2 == 0 or long_steps % 2 == 0:
-            raise ValueError('ERROR in ACTION INITIALIZATION: The discrete steps for turning and accelerating '
-                             'have to be odd numbers, so constant velocity without turning is a possible action')
-        a_max = self.vehicle.parameters.longitudinal.a_max
-        a_steps = (a_max * 2) / (long_steps - 1)
-        self.action_mapping_dict = {}
-        for idx in range(long_steps):
-            self.action_mapping_dict[idx] = np.array([a_max - (idx * a_steps), 0])
-        i = 0
-        turn_steps = (a_max * 2) / (lat_steps - 1)
-        for j in range(lat_steps):
-            if a_max - (j * turn_steps) != 0.0:
-                self.action_mapping_dict[long_steps + i] = np.array([0, a_max - (j * turn_steps)])
-                i += 1
+        super().__init__(vehicle_params_dict, long_steps, lat_steps)
 
-    def _get_new_state(self, action: Union[np.ndarray, int]) -> State:
+        a_max = self.vehicle.parameters.longitudinal.a_max
+        a_long_steps = (a_max * 2) / (long_steps - 1)
+        a_lat_steps = (a_max * 2) / (lat_steps - 1)
+
+        self.action_mapping_long = {}
+        self.action_mapping_lat = {}
+
+        for idx in range(long_steps):
+            self.action_mapping_long[idx] = (a_max - (idx * a_long_steps))
+
+        for idx in range(lat_steps):
+            self.action_mapping_lat[idx] = (a_max - (idx * a_lat_steps))
+
+    def propogate_one_state(self, state: State, action: Union[np.ndarray, int]):
+        """
+        Used to generate a trajectory from a given action
+        :param state:
+        :param action:
+        :return:
+        """
+        control_input = np.array([self.action_mapping_long[action[0]],
+                                  self.action_mapping_lat[action[1]]])
+        # Rotate the action according to the curvilinear coordinate system
+        if self.local_ccosy is not None:
+            control_input = _rotate_to_curvi(control_input, self.local_ccosy, state.position)
+
+        return self.vehicle.propagate_one_time_step(state, control_input, "acceleration")
+
+    def get_new_state(self, action: Union[np.ndarray, int]) -> State:
         """
         calculation of next state depending on the discrete action
         :param action: discrete action
         :return: next state
         """
-
-        # map discrete action to control inputs
-        control_input = self.action_mapping_dict[action]
-
-        # Rotate the action according to the curvilinear coordinate system
-        if self.local_ccosy is not None:
-            control_input = _rotate_to_curvi(control_input, self.local_ccosy, self.vehicle.state.position)
-
-        # get the next state from the PM model
-        next_state = self.vehicle.get_new_state(control_input, "acceleration")
-        return next_state
+        return self.propogate_one_state(state=self.vehicle.state, action=action)
 
 
 class ContinuousAction(Action):
@@ -226,11 +217,11 @@ class ContinuousAction(Action):
         """ Initialize object """
         super().__init__()
         # create vehicle object
-        self.vehicle = ContinuousVehicle(params_dict)
         self.action_base = action_dict['action_base']
-        self._set_rescale_factors(initial=True)
+        self._continous_collision_check = action_dict.get("continuous_collision_checking", True)
+        self.vehicle = ContinuousVehicle(params_dict, continuous_collision_checking=self._continous_collision_check)
 
-    def _set_rescale_factors(self, initial=False):
+    def _set_rescale_factors(self):
 
         a_max = self.vehicle.parameters.longitudinal.a_max
         # rescale factors for PM model
@@ -241,22 +232,20 @@ class ContinuousAction(Action):
         elif self.vehicle.vehicle_model == VehicleModel.KS:
             steering_v_max = self.vehicle.parameters.steering.v_max
             steering_v_min = self.vehicle.parameters.steering.v_min
-            self._rescale_factor = np.array([(steering_v_max - steering_v_min) / 2.0, a_max])
-            self._rescale_bias = np.array([(steering_v_max + steering_v_min) / 2.0, 0.])
+            self._rescale_factor = np.array([(steering_v_max - steering_v_min) / 2., a_max])
+            self._rescale_bias = np.array([(steering_v_max + steering_v_min) / 2., 0.])
         # rescale factors for YawRate model
         elif self.vehicle.vehicle_model == VehicleModel.YawRate:
-            if not initial:
-                yaw_rate_max = self.vehicle.parameters.yaw.v_max = np.abs(
-                    self.vehicle.parameters.longitudinal.a_max / (self.vehicle.state.velocity + 1e-6))
-                yaw_rate_min = self.vehicle.parameters.yaw.v_min = -self.vehicle.parameters.yaw.v_max
-            else:
-                yaw_rate_max = -2.
-                yaw_rate_min = 2.
-            self._rescale_factor = np.array([a_max, (yaw_rate_max - yaw_rate_min) / 2.0])
-            self._rescale_bias = np.array([0.0, (yaw_rate_max + yaw_rate_min) / 2.0])
+            yaw_rate_max = self.vehicle.parameters.yaw.v_max = np.abs(
+                self.vehicle.parameters.longitudinal.a_max / (self.vehicle.state.velocity + 1e-6))
+            yaw_rate_min = self.vehicle.parameters.yaw.v_min = -self.vehicle.parameters.yaw.v_max
+
+            self._rescale_factor = np.array([(yaw_rate_max - yaw_rate_min) / 2., a_max])
+            self._rescale_bias = np.array([0., 0.])
 
     def reset(self, initial_state: State, dt: float) -> None:
         self.vehicle.reset(initial_state, dt)
+        self._set_rescale_factors()
 
     def step(self, action: Union[np.ndarray, int], local_ccosy: CurvilinearCoordinateSystem = None) -> None:
         """
@@ -266,11 +255,11 @@ class ContinuousAction(Action):
         :param local_ccosy: Current curvilinear coordinate system
         :return: New state of ego vehicle
         """
-
-        self.vehicle.current_time_step += 1
         rescaled_action = self.rescale_action(action)
         new_state = self.vehicle.get_new_state(rescaled_action, self.action_base)
         self.vehicle.set_current_state(new_state)
+        if self.vehicle.vehicle_model == VehicleModel.YawRate:
+            self._set_rescale_factors()
 
     def rescale_action(self, action: np.ndarray) -> np.ndarray:
         """
@@ -279,14 +268,39 @@ class ContinuousAction(Action):
         :param action: action from the CommonroadEnv.
         :return: rescaled action
         """
-        if self.vehicle.vehicle_model == VehicleModel.YawRate:
-            # update rescale factors
-            self._set_rescale_factors()
+        assert hasattr(self, "_rescale_bias") and hasattr(self, "_rescale_factor"), \
+            "<ContinuousAction/rescale_action>: rescale factors not set, please run action.reset() first"
+        # if self.vehicle.vehicle_model == VehicleModel.YawRate:
+        #     # update rescale factors
+        #     self._set_rescale_factors()
 
         return self._rescale_factor * action + self._rescale_bias
 
-    # @staticmethod
-    # def _get_new_state(action: np.ndarray, vehicle) -> State:
-    #     # generate the next state for the given action
-    #     new_state = vehicle.get_new_state(action)
-    #     return new_state
+
+def action_constructor(action_configs: dict, vehicle_params: dict) -> \
+        Tuple[Action, Union[gym.spaces.Box, gym.spaces.MultiDiscrete]]:
+
+    if action_configs['action_type'] == "continuous":
+        action = ContinuousAction(vehicle_params, action_configs)
+    elif action_configs['action_type'] == "discrete":
+        if action_configs['action_base'] == "acceleration":
+            action = DiscretePMAction
+        elif action_configs['action_base'] == "jerk":
+            action = DiscretePMJerkAction
+        else:
+            raise NotImplementedError(f"action_base {action_configs['action_base']} not supported. "
+                                      f"Please choose acceleration or jerk")
+        action = action(vehicle_params, action_configs['long_steps'], action_configs['lat_steps'])
+    else:
+        raise NotImplementedError(f"action_type {action_configs['action_type']} not supported. "
+                                  f"Please choose continuous or discrete")
+
+        # Action space remove
+        # TODO initialize action space with class
+    if action_configs['action_type'] == "continuous":
+        action_high = np.array([1.0, 1.0])
+        action_space = gym.spaces.Box(low=-action_high, high=action_high, dtype="float32")
+    else:
+        action_space = gym.spaces.MultiDiscrete([action_configs['long_steps'], action_configs['lat_steps']])
+
+    return action, action_space

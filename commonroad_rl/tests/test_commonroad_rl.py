@@ -11,6 +11,7 @@ Integration tests of the CommonRoad-RL repository
 """
 import logging
 import os
+import shutil
 
 from commonroad_rl.train_model import run_stable_baselines, run_stable_baselines_argsparser
 from commonroad_rl.generate_solution import solve_scenarios
@@ -25,7 +26,7 @@ output_path = output_root("test_commonroad_rl")
 
 
 def run_overfit(test_batch, goal_relaxation, num_of_steps, env_id):
-    xml_scenarios_path = os.path.join(resource_path)
+    xml_scenarios_path = os.path.join(resource_path, test_batch)
     output_base_path = os.path.join(output_path, test_batch)
     pickle_path = os.path.join(output_base_path, "pickles")
     log_path = os.path.join(output_base_path, "logs")
@@ -41,6 +42,7 @@ def run_overfit(test_batch, goal_relaxation, num_of_steps, env_id):
     meta_scenario_path = os.path.join(pickle_path, "meta_scenario")
     train_reset_config_path = os.path.join(pickle_path, "problem")
     test_reset_config_path = os.path.join(pickle_path, "problem")
+    shutil.copytree(test_reset_config_path, os.path.join(pickle_path, "problem_test"))
     visualization_path = os.path.join(output_path, "images")
     print(meta_scenario_path)
     algo = "ppo2"
@@ -60,7 +62,8 @@ def run_overfit(test_batch, goal_relaxation, num_of_steps, env_id):
         # TODO: force other necessary settings for this scenario
         args_str += "surrounding_configs:{'observe_lane_circ_surrounding':" + f"{True}" + "}"
         args_str += " surrounding_configs:{'observe_lidar_circle_surrounding':" + f"{False}" + "}"
-        args_str += " reward_configs_hybrid:{'reward_get_close_coefficient':2.}"
+        args_str += " reward_configs_hybrid:{'reward_get_close_coefficient':2.," \
+                    "'reward_goal_reached':1000.,'reward_collision':-1000.}"
         args_str += " vehicle_params:{'vehicle_type':2,'vehicle_model':0}"
 
     args = run_stable_baselines_argsparser().parse_args(args_str.split(sep=" "))
@@ -71,7 +74,7 @@ def run_overfit(test_batch, goal_relaxation, num_of_steps, env_id):
     cost_function = "JB1"
 
     results = solve_scenarios(
-        test_path=test_reset_config_path,
+        test_path=pickle_path,
         model_path=model_path,
         algo=algo,
         solution_path=solution_path,

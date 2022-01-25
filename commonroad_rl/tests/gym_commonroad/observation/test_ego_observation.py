@@ -31,7 +31,7 @@ def prepare_for_ego_test():
         "position": np.array([0.0, 0.0]),
         "yaw_rate": 0.0,
         "slip_angle": 0.0,
-        "time_step": 0.0,
+        "time_step": 0,
         "orientation": 0.0,
     }
 

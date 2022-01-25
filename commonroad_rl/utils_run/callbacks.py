@@ -295,14 +295,14 @@ class MultiEnvsEvalCallback(EventCallback):
             log_path: str = None,
             best_model_save_path: str = None,
             eval_freq: int = 1000,
-            n_eval_episodes: int = 5,
+            n_eval_timesteps: int = 1000,
             deterministic: bool = True,
             render: bool = False,
             verbose: int = 2,
     ):
         # Set basics
         super(MultiEnvsEvalCallback, self).__init__(callback_on_new_best, verbose=verbose)
-        self.n_eval_episodes = n_eval_episodes
+        self.n_eval_timesteps = n_eval_timesteps
         self.eval_freq = eval_freq
         self.best_mean_reward = -np.inf
         self.last_mean_reward = -np.inf
@@ -339,14 +339,14 @@ class MultiEnvsEvalCallback(EventCallback):
             def evaluate_policy_multi_envs(
                     model: "BaseRLModel",
                     env: Union[gym.Env, VecEnv],
-                    n_eval_episodes: int = 10,
+                    n_eval_timesteps: int = 1000,
                     deterministic: bool = True,
                     render: bool = False,
                     callback: Optional[Callable] = None,
             ) -> Tuple[List[float], List[int]]:
                 """
-                Runs policy on `env.num_envs` environments until `n_eval_episodes` episodes have been collected asynchronously,,
-                and returns lists of episode rewards and episode lengths.
+                Runs policy on `env.num_envs` environments until `n_eval_timesteps` timesteps have been collected asynchronously,,
+                and returns lists of timesteps rewards and timesteps lengths.
                 """
 
                 episode_rewards = []
@@ -394,8 +394,8 @@ class MultiEnvsEvalCallback(EventCallback):
                     if render:
                         env.render()
 
-                    # Break if enough results are obtained
-                    if len(episode_rewards) >= n_eval_episodes:
+                    # Break if n_eval_timesteps enough results are obtained
+                    if sum(episode_lengths) >= n_eval_timesteps:
                         break
 
                 return episode_rewards, episode_lengths
@@ -405,7 +405,7 @@ class MultiEnvsEvalCallback(EventCallback):
 
             episode_rewards, episode_lengths = evaluate_policy_multi_envs(self.model,
                                                                           self.eval_env,
-                                                                          self.n_eval_episodes,
+                                                                          self.n_eval_timesteps,
                                                                           self.deterministic,
                                                                           self.render)
 
