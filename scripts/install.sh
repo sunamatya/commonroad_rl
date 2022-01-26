@@ -154,7 +154,6 @@ else
   bash build.sh -e "$CONDA_PREFIX" -v $PYTHON_VERSION --serializer --install --wheel -j $JOBS > /dev/null 2>&1
 fi
 
-python setup.py install
 cd_to_installdir
 print_info "Installation script completed, please run the unit tests to verify."
 sleep 3
