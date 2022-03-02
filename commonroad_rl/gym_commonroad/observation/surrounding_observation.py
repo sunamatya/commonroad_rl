@@ -299,8 +299,6 @@ class SurroundingObservation(Observation):
                 obs_t_type = TrajectoryType.LEFT
             elif obstacle_turning_signal.indicator_right:
                 obs_t_type = TrajectoryType.RIGHT
-            # else:
-            #     obs_t_type = TrajectoryType.STRAIGHT
 
             # Classify the obstacle priority based on its trajectory class and signs
             obstacle_lanelet_priority = self._detect_lanelet_priority(obs_lanelet, obs_t_type)
@@ -572,7 +570,7 @@ class SurroundingObservation(Observation):
         for o in dyn_obstacles:
             # TODO: initial lanelet_assignment missed?
             if o.prediction is not None:
-                center_lanelet_ids = list(o.prediction.center_lanelet_assignment.values())
+                # center_lanelet_ids = list(o.prediction.center_lanelet_assignment.values())
                 if o.initial_state.time_step <= self._current_time_step <= o.prediction.trajectory.final_state.time_step:
                     obstacle_state = o.state_at_time(self._current_time_step)
                     obstacle_point = pycrcc.Point(obstacle_state.position[0], obstacle_state.position[1])
@@ -587,11 +585,12 @@ class SurroundingObservation(Observation):
                             if o_lanelet_id is None:
                                 # neither center or shape locate inside a lanelet
                                 # TODO: skip or take last available time step ??
-                                non_empty_id_sets = [id_set for id_set in center_lanelet_ids if id_set]
-                                if len(non_empty_id_sets) == 0:
-                                    continue
-                                o_lanelet_id = self._get_occupied_lanelet_id(self._scenario, list(non_empty_id_sets[-1]),
-                                                                             obstacle_state)
+                                # non_empty_id_sets = [id_set for id_set in center_lanelet_ids if id_set]
+                                # if len(non_empty_id_sets) == 0:
+                                #     continue
+                                # o_lanelet_id = self._get_occupied_lanelet_id(self._scenario, list(non_empty_id_sets[-1]),
+                                #                                              obstacle_state)
+                                continue
                         lanelet_ids.append(o_lanelet_id)
                         obstacle_states.append(obstacle_state)
                         obstacles.append(o)
